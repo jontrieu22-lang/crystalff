@@ -1,11 +1,19 @@
 {
   "name": "crystalff",
   "version": "1.0.0",
-  "description": "Kalshi picks tournament: who is the best situation monitor?",
+  "description": "Loser of the Week: weekly group parlay built from Kalshi NFL markets",
   "type": "module",
   "scripts": {
-    "start": "node server.js",
-    "test": "node test/smoke.js"
+    "test": "node test/smoke.js",
+    "dev": "node dev.js"
   },
-  "engines": { "node": ">=22.13" }
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@neondatabase/serverless": "^1.1.0"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.5.8"
+  }
 }
