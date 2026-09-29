@@ -1,0 +1,11 @@
+{
+  "name": "crystalff",
+  "version": "1.0.0",
+  "description": "Kalshi picks tournament: who is the best situation monitor?",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node test/smoke.js"
+  },
+  "engines": { "node": ">=22.13" }
+}
