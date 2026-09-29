@@ -1,0 +1,19 @@
+{
+  "name": "crystalff",
+  "version": "1.0.0",
+  "description": "Loser of the Week: weekly group parlay built from Kalshi NFL markets",
+  "type": "module",
+  "scripts": {
+    "test": "node test/smoke.js",
+    "dev": "node dev.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@neondatabase/serverless": "^1.1.0"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.5.8"
+  }
+}
