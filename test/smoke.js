@@ -7,7 +7,11 @@ const realNow = Date.now;
 let now = Date.parse('2026-09-30T12:00:00Z');
 Date.now = () => now;
 
-const mk = (ticker, event, sub, yes_bid, yes_ask) => ({ ticker, event_ticker: event, yes_sub_title: sub, title: sub, status: 'active', result: '', yes_bid, yes_ask });
+// Shaped like live Kalshi responses: dollar-string prices, occurrence_datetime = kickoff.
+const kick = (event) => (/OCT01/.test(event) ? '2026-10-02T00:15:00Z' : '2026-10-04T17:00:00Z');
+const d = (c) => (c == null ? undefined : (c / 100).toFixed(4));
+const mk = (ticker, event, sub, yes_bid, yes_ask) => ({ ticker, event_ticker: event, title: sub, yes_sub_title: sub, no_sub_title: sub, status: 'active', result: '',
+  yes_bid_dollars: d(yes_bid), yes_ask_dollars: d(yes_ask), no_ask_dollars: d(yes_bid == null ? null : 100 - yes_bid), occurrence_datetime: kick(event) });
 const events = {
   KXNFLGAME: [
     { event_ticker: 'KXNFLGAME-26OCT04BUFNE', series_ticker: 'KXNFLGAME', title: 'Buffalo at New England', markets: [
@@ -17,11 +21,11 @@ const events = {
     { event_ticker: 'KXNFLGAME-26OCT01SEALA', series_ticker: 'KXNFLGAME', title: 'Seattle at LA', markets: [
       mk('KXNFLGAME-26OCT01SEALA-SEA', 'KXNFLGAME-26OCT01SEALA', 'Seattle', 50, 52)] },
   ],
-  KXNFLANYTD: [
-    { event_ticker: 'KXNFLANYTD-26OCT04BUFNE', series_ticker: 'KXNFLANYTD', title: 'Anytime TD', markets: [
-      mk('KXNFLANYTD-26OCT04BUFNE-JALLEN', 'KXNFLANYTD-26OCT04BUFNE', 'Josh Allen', 40, 42),
-      // Newer Kalshi responses carry prices as dollar strings.
-      { ...mk('KXNFLANYTD-26OCT04BUFNE-JCOOK', 'KXNFLANYTD-26OCT04BUFNE', 'James Cook'), yes_bid_dollars: '0.55', yes_ask_dollars: '0.57' }] },
+  KXNFLTD: [
+    { event_ticker: 'KXNFLTD-26OCT04BUFNE', series_ticker: 'KXNFLTD', title: 'Anytime TD', markets: [
+      mk('KXNFLTD-26OCT04BUFNE-JALLEN', 'KXNFLTD-26OCT04BUFNE', 'Josh Allen', 40, 42),
+      // Older responses carried integer cents; both are read.
+      { ...mk('KXNFLTD-26OCT04BUFNE-JCOOK', 'KXNFLTD-26OCT04BUFNE', 'James Cook'), yes_bid: 55, yes_ask: 57, no_ask_dollars: undefined }] },
   ],
 };
 const markets = Object.fromEntries(Object.values(events).flat().flatMap((e) => e.markets).map((m) => [m.ticker, m]));
@@ -30,8 +34,7 @@ const kalshi = http.createServer((req, res) => {
   const u = new URL(req.url, 'http://x');
   const ticker = u.pathname.split('/').pop();
   let body;
-  if (u.pathname === '/series') body = { series: [{ ticker: 'KXNFLGAME', title: 'Pro Football Game' }, { ticker: 'KXNFLANYTD', title: 'NFL Anytime Touchdown' }, { ticker: 'KXNBAGAME', title: 'NBA' }] };
-  else if (u.pathname === '/events') body = { events: events[u.searchParams.get('series_ticker')] || [], cursor: '' };
+  if (u.pathname === '/events') body = { events: events[u.searchParams.get('series_ticker')] || [], cursor: '' };
   else if (u.pathname.startsWith('/markets/') && markets[ticker]) body = { market: markets[ticker] };
   res.writeHead(body ? 200 : 404, { 'content-type': 'application/json' }).end(JSON.stringify(body || {}));
 }).listen(0);
@@ -59,19 +62,19 @@ const cat = (await call('/api/catalog?week=4')).data;
 assert.equal(cat.games.length, 1);
 const [game] = cat.games;
 assert.equal(game.title, 'Buffalo at New England');
-const td = game.groups.find((g) => /Anytime/.test(g.title));
-assert.equal(td.title, 'Anytime Touchdown');
+assert.deepEqual(game.groups.map((g) => g.title), ['Winner', 'Touchdowns']);
+const td = game.groups[1];
 assert.deepEqual(td.markets.find((m) => m.label === 'James Cook').yes, { price: 57, odds: -133, ok: true });
 assert.equal(td.markets.find((m) => m.label === 'Josh Allen').yes.ok, false); // +138 > +120
 
 // Picking rules.
 const pick = (name, ticker, side) => call('/api/leg', 'POST', { week: 4, playerId: id(name), ticker, side, group: 'Test' });
-assert.match((await pick('Josh', 'KXNFLANYTD-26OCT04BUFNE-JALLEN', 'yes')).data.error, /Max is \+120/);
+assert.match((await pick('Josh', 'KXNFLTD-26OCT04BUFNE-JALLEN', 'yes')).data.error, /Max is \+120/);
 assert.match((await pick('Josh', 'KXNFLGAME-26OCT01SEALA-SEA', 'yes')).data.error, /isn't part of Week 4/);
 assert.equal((await pick('Josh', 'KXNFLGAME-26OCT04BUFNE-BUF', 'yes')).data.odds, -163);
 assert.equal((await pick('Sam', 'KXNFLGAME-26OCT04BUFNE-BUF', 'no')).status, 409); // same market taken
-assert.equal((await pick('Sam', 'KXNFLANYTD-26OCT04BUFNE-JCOOK', 'yes')).status, 200);
-assert.equal((await pick('Keane', 'KXNFLANYTD-26OCT04BUFNE-JALLEN', 'no')).data.odds, -150);
+assert.equal((await pick('Sam', 'KXNFLTD-26OCT04BUFNE-JCOOK', 'yes')).status, 200);
+assert.equal((await pick('Keane', 'KXNFLTD-26OCT04BUFNE-JALLEN', 'no')).data.odds, -150);
 assert.equal((await pick('Josh', 'KXNFLGAME-26OCT04BUFNE-NE', 'no')).status, 200); // replaces Josh's leg
 
 wk = (await call('/api/week?week=4')).data;
@@ -83,8 +86,8 @@ assert.equal(wk.legs.find((l) => l.player === 'Josh').odds, -163); // NO at 100 
 now = Date.parse('2026-10-03T18:00:01Z');
 assert.equal((await pick('Eric', 'KXNFLGAME-26OCT04BUFNE-BUF', 'yes')).status, 403);
 Object.assign(markets['KXNFLGAME-26OCT04BUFNE-NE'], { status: 'finalized', result: 'no' });
-Object.assign(markets['KXNFLANYTD-26OCT04BUFNE-JCOOK'], { status: 'finalized', result: 'yes' });
-Object.assign(markets['KXNFLANYTD-26OCT04BUFNE-JALLEN'], { status: 'finalized', result: 'yes' });
+Object.assign(markets['KXNFLTD-26OCT04BUFNE-JCOOK'], { status: 'finalized', result: 'yes' });
+Object.assign(markets['KXNFLTD-26OCT04BUFNE-JALLEN'], { status: 'finalized', result: 'yes' });
 wk = (await call('/api/week?week=4')).data;
 assert.deepEqual(wk.legs.map((l) => [l.player, l.status]), [['Sam', 'hit'], ['Keane', 'miss'], ['Josh', 'hit']]);
 assert.equal(wk.soleMiss, 'Keane');
