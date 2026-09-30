@@ -1,4 +1,5 @@
 const app = document.getElementById('app');
+const JAMES = "James Clause: if this is the only one that doesn't hit, you owe everyone the parlay value without your leg";
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 const odds = (o) => (o == null ? '—' : o > 0 ? `+${o}` : `${o}`);
 const money = (n) => (n == null ? '—' : `$${n.toLocaleString()}`);
@@ -64,7 +65,8 @@ function weekView() {
   const p = d.parlay;
 
   let banner = '';
-  if (d.soleMiss) banner = `<div class="banner bad">😬 ${esc(d.soleMiss)} was the only leg that missed and owes next week's $5 ($10 total).</div>`;
+  if (d.jamesClause) banner = `<div class="banner bad">💊 James Clause: ${esc(d.jamesClause.player)}'s poison pill was the only miss. They owe everyone the parlay value without their leg${d.jamesClause.owes != null ? ` (${money(d.jamesClause.owes)})` : ''}.</div>`;
+  else if (d.soleMiss) banner = `<div class="banner bad">😬 ${esc(d.soleMiss)} was the only leg that missed and owes next week's $5 ($10 total).</div>`;
   else if (p.won) banner = `<div class="banner good">💰 Parlay hit! Every leg cashed.</div>`;
   else if (p.settled && p.misses > 1) banner = `<div class="banner warn">${p.misses} legs missed. Nobody's on the hook alone.</div>`;
 
@@ -72,7 +74,7 @@ function weekView() {
       <div class="st">${{ hit: '✅', miss: '❌', void: '➖', pending: '⏳' }[l.status]}</div>
       <div class="grow">
         <div class="who">${esc(l.player)}</div>
-        <div>${esc(l.label)} <b>${l.side.toUpperCase()}</b></div>
+        <div>${esc(l.label)} <b>${l.side.toUpperCase()}</b>${l.pill ? ` <span title="${esc(JAMES)}">💊</span>` : ''}</div>
         <div class="mut">${esc(l.game)}${l.liveOdds != null && l.status === 'pending' && l.liveOdds !== l.odds ? ` · now ${odds(l.liveOdds)}` : ''}</div>
       </div>
       <div class="odds">${odds(l.odds)}</div>
@@ -132,10 +134,9 @@ function seasonView() {
 function rulesView() {
   return `<div class="card"><pre><b>Rules</b>
 
-1. Max odds per leg: +120. Longer legs are greyed out.
-2. If your leg is the only leg that misses, you're on the hook for next week's $5 automatically (your total that week is $10).
-3. Place by Saturday at 2:00 PM ET. The app locks picks then, and only games after the lock are available.
-4. James Clause: if you put in a poison-pill leg (+600) and it's the only one that doesn't hit, you owe everyone the parlay value without your leg.
+1. If your leg is the only leg that misses, you're on the hook for next week's $5 automatically (your total that week is $10).
+2. Place by Saturday at 2:00 PM ET. The app locks picks then, and only games after the lock are available.
+3. James Clause: if you put in a poison-pill leg (+600) and it's the only one that doesn't hit, you owe everyone the parlay value without your leg.
 
 <b>How the app works</b>
 • One leg per person per week, and no two people can take the same leg.
@@ -239,10 +240,10 @@ function pickSheet() {
           const btn = (side) => {
             const sd = m[side];
             if (!sd) return `<button class="side" disabled>${side.toUpperCase()}<b>—</b></button>`;
-            const dis = !sd.ok || (t && !mineHere);
+            const dis = t && !mineHere;
             return `<button class="side ${mineHere && t.side === side ? 'mine' : ''}" ${dis ? 'disabled' : ''}
-              data-pick="${esc(m.ticker)}" data-side="${side}" data-label="${esc(m.label)}" data-group="${esc(gr.title)}" data-game="${esc(g.title)}" data-odds="${sd.odds}">
-              ${side.toUpperCase()}<b>${odds(sd.odds)}</b></button>`;
+              data-pick="${esc(m.ticker)}" data-side="${side}" data-label="${esc(m.label)}" data-group="${esc(gr.title)}" data-game="${esc(g.title)}" data-odds="${sd.odds}" ${sd.pill ? `data-pill="1" title="${esc(JAMES)}"` : ''}>
+              ${side.toUpperCase()}${sd.pill ? ' 💊' : ''}<b>${odds(sd.odds)}</b></button>`;
           };
           let label = esc(m.label);
           if (fam.pos >= 0) {
@@ -271,7 +272,7 @@ function pickSheet() {
   return `<div class="sheet"><div class="sheet-head">
       <div class="row" style="margin-bottom:8px"><b class="grow">Week ${d.week}: pick your leg</b><button class="chip" data-act="close">Close</button></div>
       <input id="filter" type="search" placeholder="Search: Bills, Mahomes, touchdowns, spread…" value="${esc(state.filter)}">
-      <div class="mut" style="margin-top:6px">Tap a game or search, then tap YES or NO. Max +${state.catalog?.maxOdds ?? 120}; greyed-out bets are too long or already taken.</div>
+      <div class="mut" style="margin-top:6px">Tap a game or search, then tap YES or NO. 💊 = +${state.catalog?.poisonPill ?? 600} or longer (James Clause). Greyed-out bets are already taken.</div>
     </div><div class="sheet-body">${body}</div></div>`;
 }
 
@@ -310,7 +311,8 @@ async function openPicker() {
 
 async function pick(b) {
   const { pick: ticker, side, label, group, game } = b.dataset;
-  if (!confirm(`${group}: ${label}, ${side.toUpperCase()} at ${odds(Number(b.dataset.odds))}?\n\nThis replaces any leg you already have this week.`)) return;
+  const pill = b.dataset.pill ? `\n\n💊 ${JAMES}` : '';
+  if (!confirm(`${group}: ${label}, ${side.toUpperCase()} at ${odds(Number(b.dataset.odds))}?${pill}\n\nThis replaces any leg you already have this week.`)) return;
   try {
     const r = await api('/api/leg', { method: 'POST', body: { week: state.week, playerId: state.me.id, ticker, side, group, game } });
     state.picking = false;
