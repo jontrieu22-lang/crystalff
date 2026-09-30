@@ -13,7 +13,7 @@ const state = {
   tab: 'week',
   week: Number(new URLSearchParams(location.search).get('week')) || null,
   data: null, catalog: null, season: null,
-  picking: false, choosingName: false, filter: '', openGames: new Set(),
+  picking: false, choosingName: false, filter: '', openGames: new Set(), lines: {},
 };
 
 async function api(path, { method = 'GET', body } = {}) {
@@ -183,6 +183,36 @@ const ALIASES = {
   'Receiving yards': 'rec receiving yds yards wr te',
 };
 
+// Kalshi lists each line as its own market ("wins by over 3.5", "over 4.5", ...).
+// Group markets whose labels differ only in one number into a single row.
+const NUM = /\d+(?:\.\d+)?/g;
+function ladders(markets) {
+  const byShape = new Map();
+  for (const m of markets) {
+    const shape = m.label.replace(NUM, '#');
+    (byShape.get(shape) || byShape.set(shape, []).get(shape)).push(m);
+  }
+  return [...byShape.entries()].flatMap(([shape, ms]) => {
+    const nums = ms.map((m) => m.label.match(NUM) || []);
+    const pos = ms.length > 1 ? nums[0].findIndex((_, i) => nums.some((n) => n[i] !== nums[0][i])) : -1;
+    if (pos < 0) return ms.map((m) => ({ key: m.ticker, pos: -1, markets: [m] }));
+    const lines = ms.map((m, i) => ({ ...m, lineText: nums[i][pos], line: Number(nums[i][pos]) })).sort((a, b) => a.line - b.line);
+    return [{ key: shape, pos, markets: lines }];
+  });
+}
+
+// Which line a ladder row shows: the one you picked, else the one you chose in
+// the dropdown, else the line closest to even odds.
+function selectedLine(fam, famKey, takenBy) {
+  if (fam.markets.length === 1) return fam.markets[0];
+  const chosen = fam.markets.find((m) => m.ticker === state.lines[famKey]);
+  if (chosen) return chosen;
+  const mine = fam.markets.find((m) => takenBy.get(m.ticker)?.playerId === state.me?.id);
+  if (mine) return mine;
+  const yes = (m) => m.yes?.price ?? (m.no ? 100 - m.no.price : 0);
+  return fam.markets.reduce((best, m) => (Math.abs(yes(m) - 50) < Math.abs(yes(best) - 50) ? m : best));
+}
+
 function pickSheet() {
   const d = state.data;
   const takenBy = new Map(d.legs.map((l) => [l.ticker, l]));
@@ -197,22 +227,35 @@ function pickSheet() {
     const games = state.catalog.games.map((g) => {
       const open = f || state.openGames.has(g.key);
       const groups = !open ? '' : g.groups.map((gr) => {
-        const rows = gr.markets.filter((m) => {
+        const rows = ladders(gr.markets).filter((fam) => {
           if (!words.length) return true;
-          const hay = `${g.title} ${gr.title} ${ALIASES[gr.title] || ''} ${m.label}`.toLowerCase();
+          const hay = `${g.title} ${gr.title} ${ALIASES[gr.title] || ''} ${fam.markets.map((m) => m.label).join(' ')}`.toLowerCase();
           return words.every((w) => hay.includes(w)) && budget-- > 0;
-        }).map((m) => {
+        }).map((fam) => {
+          const famKey = `${g.key}|${gr.title}|${fam.key}`;
+          const m = selectedLine(fam, famKey, takenBy);
           const t = takenBy.get(m.ticker);
           const mineHere = t && t.playerId === state.me?.id;
           const btn = (side) => {
-            const s = m[side];
-            if (!s) return `<button class="side" disabled>${side.toUpperCase()}<b>—</b></button>`;
-            const dis = !s.ok || (t && !mineHere);
+            const sd = m[side];
+            if (!sd) return `<button class="side" disabled>${side.toUpperCase()}<b>—</b></button>`;
+            const dis = !sd.ok || (t && !mineHere);
             return `<button class="side ${mineHere && t.side === side ? 'mine' : ''}" ${dis ? 'disabled' : ''}
-              data-pick="${esc(m.ticker)}" data-side="${side}" data-label="${esc(m.label)}" data-group="${esc(gr.title)}" data-game="${esc(g.title)}" data-odds="${s.odds}">
-              ${side.toUpperCase()}<b>${odds(s.odds)}</b></button>`;
+              data-pick="${esc(m.ticker)}" data-side="${side}" data-label="${esc(m.label)}" data-group="${esc(gr.title)}" data-game="${esc(g.title)}" data-odds="${sd.odds}">
+              ${side.toUpperCase()}<b>${odds(sd.odds)}</b></button>`;
           };
-          return `<div class="mkt"><div class="grow">${esc(m.label)}${t && !mineHere ? `<div class="taken">Taken by ${esc(t.player)}</div>` : ''}</div>${btn('yes')}${btn('no')}</div>`;
+          let label = esc(m.label);
+          if (fam.pos >= 0) {
+            // Swap the varying number in the label for a dropdown of every line Kalshi offers.
+            const opts = fam.markets.map((x) => {
+              const tk = takenBy.get(x.ticker);
+              const note = tk && tk.playerId !== state.me?.id ? ` (${tk.player})` : '';
+              return `<option value="${esc(x.ticker)}" ${x.ticker === m.ticker ? 'selected' : ''}>${esc(x.lineText)}${esc(note)}</option>`;
+            }).join('');
+            let i = -1;
+            label = esc(fam.markets[0].label).replace(NUM, (n) => (++i === fam.pos ? `<select class="line" data-fam="${esc(famKey)}" aria-label="Line">${opts}</select>` : n));
+          }
+          return `<div class="mkt"><div class="grow">${label}${t && !mineHere ? `<div class="taken">Taken by ${esc(t.player)}</div>` : ''}</div>${btn('yes')}${btn('no')}</div>`;
         }).join('');
         return rows && `<div class="group"><h4>${esc(gr.title)}</h4>${rows}</div>`;
       }).join('');
@@ -280,6 +323,10 @@ async function host(action, extra = {}) {
   try { await api('/api/admin', { method: 'POST', body: { action, week: state.week, ...extra } }); toast('Saved'); await refresh(); }
   catch (e) { toast(e.message); }
 }
+
+app.addEventListener('change', (e) => {
+  if (e.target.matches('select.line')) { state.lines[e.target.dataset.fam] = e.target.value; render(); }
+});
 
 app.addEventListener('input', (e) => {
   if (e.target.id === 'filter') { state.filter = e.target.value; render(); }
