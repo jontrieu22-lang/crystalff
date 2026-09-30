@@ -89,12 +89,18 @@ assert.equal((await pick('Josh', 'KXNFLGAME-26OCT04BUFNE-NE', 'no')).status, 200
 wk = (await call('/api/week?week=4')).data;
 assert.equal(wk.legs.length, 3);
 assert.equal(wk.waitingOn.length, 9);
+
+// A player can take their own leg back out before the lock (no host key).
+assert.equal((await pick('Eric', 'KXNFLGAME-26OCT04SFDAL-SF', 'yes')).status, 200);
+assert.equal((await call('/api/leg', 'DELETE', { week: 4, playerId: id('Eric') })).status, 200);
+assert.equal((await call('/api/week?week=4')).data.legs.some((l) => l.player === 'Eric'), false);
 assert.equal(wk.legs.find((l) => l.player === 'Josh').odds, -163); // NO at 100 - 38 = 62
 assert.equal(wk.legs.find((l) => l.player === 'Keane').pill, true);
 
 // After lock: no changes; Kalshi settles; Keane's poison pill is the only miss.
 now = Date.parse('2026-10-04T16:00:01Z');
 assert.equal((await pick('Eric', 'KXNFLGAME-26OCT04BUFNE-BUF', 'yes')).status, 403);
+assert.equal((await call('/api/leg', 'DELETE', { week: 4, playerId: id('Sam') })).status, 403); // can't remove after lock
 Object.assign(markets['KXNFLGAME-26OCT04BUFNE-NE'], { status: 'finalized', result: 'no' });
 Object.assign(markets['KXNFLTD-26OCT04BUFNE-JCOOK'], { status: 'finalized', result: 'yes' });
 Object.assign(markets['KXNFLTD-26OCT04BUFNE-LONG'], { status: 'finalized', result: 'no' });
