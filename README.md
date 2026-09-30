@@ -27,7 +27,7 @@ Kalshi is only read for prices and results. Nobody needs a Kalshi account, and n
    - `CRON_SECRET`: any random string. Vercel sends it to the daily settle cron.
 4. Deploy. The 2025 roster is seeded on first use.
 
-Optional variables: `SEASON_START`, `POISON_PILL` (600), `STAKE` (5), `NFL_SERIES` (e.g.
+Optional variables: `SEASON_START`, `POISON_PILL` (600), `STAKE` (5, total stake on the parlay), `NFL_SERIES` (e.g.
 `KXNFLGAME:Winner,KXNFLTD:Touchdowns` to change which Kalshi series are offered), `KALSHI_BASE`.
 
 ## Local dev

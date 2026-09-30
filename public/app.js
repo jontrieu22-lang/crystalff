@@ -106,7 +106,7 @@ function weekView() {
   <div class="card">
     <div class="row"><span class="grow mut">Kalshi odds (est.)</span><b>${odds(p.odds)}</b></div>
     ${d.actualOdds ? `<div class="row"><span class="grow mut">Actual odds placed</span><b>${esc(d.actualOdds)}</b></div>` : ''}
-    <div class="row"><span class="grow mut">Pot (${d.legs.length} × $5)</span><b>${money(p.stake)}</b></div>
+    <div class="row"><span class="grow mut">Stake</span><b>${money(p.stake)}</b></div>
     <div class="row"><span class="grow mut">Est. payout</span><b>${money(p.payout)}</b></div>
     <div class="row"><span class="grow mut">Placing it</span><b>${esc(d.placer) || 'TBD'}</b></div>
     ${d.note ? `<p class="mut">${esc(d.note)}</p>` : ''}
