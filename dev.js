@@ -1,20 +1,15 @@
-// Local stand-in for Vercel: serves public/ and api/*.js, backed by PGlite
-// (embedded Postgres) unless DATABASE_URL points at a real database.
+// Local stand-in for Vercel: serves public/ and api/*.js. Data is kept in
+// memory unless BLOB_READ_WRITE_TOKEN points at a real Blob store.
 import http from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { extname, join, normalize } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { setAdapter } from './lib/db.js';
+import { memoryBackend, setBackend } from './lib/store.js';
 
 const ROOT = fileURLToPath(new URL('.', import.meta.url));
 const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.json': 'application/json' };
 
-export async function usePglite(dataDir) {
-  const { PGlite } = await import('@electric-sql/pglite');
-  const db = new PGlite(dataDir);
-  setAdapter({ query: async (t, p) => (await db.query(t, p)).rows, exec: (t) => db.exec(t) });
-  return db;
-}
+export const useMemoryStore = () => setBackend(memoryBackend());
 
 export function createServer() {
   return http.createServer(async (req, res) => {
@@ -41,7 +36,7 @@ export function createServer() {
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  if (!process.env.DATABASE_URL) await usePglite(join(ROOT, '.data'));
+  if (!process.env.BLOB_READ_WRITE_TOKEN) useMemoryStore();
   const port = process.env.PORT || 3000;
   createServer().listen(port, () => console.log(`http://localhost:${port}`));
 }

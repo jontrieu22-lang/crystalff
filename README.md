@@ -21,11 +21,11 @@ Kalshi is only read for prices and results. Nobody needs a Kalshi account, and n
 ## Deploy on Vercel
 
 1. Import this GitHub repo in Vercel. The Framework Preset is "Other", with no build command.
-2. In the project go to **Storage → Marketplace → Neon (Postgres)** and connect it. This sets `DATABASE_URL`.
+2. In the project go to **Storage → Create → Blob** (private) and connect it. This sets `BLOB_READ_WRITE_TOKEN`.
 3. Add environment variables:
    - `ADMIN_KEY`: the host password.
    - `CRON_SECRET`: any random string. Vercel sends it to the daily settle cron.
-4. Deploy. Tables are created, and the 2025 roster is seeded, on the first request.
+4. Deploy. The 2025 roster is seeded on first use.
 
 Optional variables: `SEASON_START`, `MAX_ODDS` (120), `STAKE` (5), `NFL_SERIES` (e.g.
 `KXNFLGAME:Winner,KXNFLTD:Touchdowns` to change which Kalshi series are offered), `KALSHI_BASE`.
@@ -34,7 +34,7 @@ Optional variables: `SEASON_START`, `MAX_ODDS` (120), `STAKE` (5), `NFL_SERIES` 
 
 ```
 npm install
-npm run dev      # http://localhost:3000, embedded Postgres in ./.data
+npm run dev      # http://localhost:3000, data kept in memory
 npm test         # end-to-end test against a fake Kalshi
 ```
 
@@ -42,5 +42,5 @@ npm test         # end-to-end test against a fake Kalshi
 
 - `public/`: the phone-first page (`index.html`, `app.js`).
 - `api/`: Vercel functions (`week`, `catalog`, `leg`, `season`, `admin`, `cron`).
-- `lib/`: `kalshi.js` (public market API), `rules.js` (calendar and odds math), `league.js` (scoring), `db.js`.
+- `lib/`: `kalshi.js` (public market API), `rules.js` (calendar and odds math), `league.js` (scoring), `store.js` (league data as one JSON blob).
 - `dev.js`: a local stand-in for Vercel.

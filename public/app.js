@@ -13,7 +13,7 @@ const state = {
   tab: 'week',
   week: Number(new URLSearchParams(location.search).get('week')) || null,
   data: null, catalog: null, season: null,
-  picking: false, choosingName: false, filter: '',
+  picking: false, choosingName: false, filter: '', openGames: new Set(),
 };
 
 async function api(path, { method = 'GET', body } = {}) {
@@ -90,7 +90,7 @@ function weekView() {
     </div>
   </div>
   ${banner}
-  ${!d.locked && state.me ? `<button class="btn" data-act="pick" style="margin-bottom:12px">${mine ? 'Change my leg' : 'Pick my leg'}</button>` : ''}
+  ${!d.locked && state.me ? `<button class="btn" data-act="pick" style="margin-bottom:12px">${mine ? '🔍 Change my leg' : "🔍 Search this week's NFL bets"}</button>` : ''}
   ${!state.me ? `<button class="btn" data-act="who" style="margin-bottom:12px">Tap your name to play</button>` : ''}
   <div class="card">
     <div class="row" style="margin-bottom:6px">
@@ -175,6 +175,14 @@ function nameSheet() {
     </div><p class="mut">Not listed? Ask the host to add you.</p></div></div>`;
 }
 
+// Betting shorthand people will type, mapped onto Kalshi's group names.
+const ALIASES = {
+  Winner: 'moneyline ml win wins', Spread: 'spread line cover ats', 'Total points': 'total over under o/u points',
+  'Team total': 'team total over under o/u', Touchdowns: 'td tds touchdown anytime scorer',
+  'Passing yards': 'pass passing yds yards qb', 'Rushing yards': 'rush rushing yds yards rb',
+  'Receiving yards': 'rec receiving yds yards wr te',
+};
+
 function pickSheet() {
   const d = state.data;
   const takenBy = new Map(d.legs.map((l) => [l.ticker, l]));
@@ -183,9 +191,17 @@ function pickSheet() {
   if (!state.catalog) body = '<p class="mut">Loading this week\'s Kalshi markets…</p>';
   else if (state.catalog.error) body = `<p class="mut">Couldn't load Kalshi: ${esc(state.catalog.error)}</p>`;
   else {
+    // Only build rows for games that are open or match the search: ~2,400 legs a week is too many for a phone.
+    let budget = 150;
+    const words = f.split(/\s+/).filter(Boolean);
     const games = state.catalog.games.map((g) => {
-      const groups = g.groups.map((gr) => {
-        const rows = gr.markets.filter((m) => !f || `${g.title} ${gr.title} ${m.label}`.toLowerCase().includes(f)).map((m) => {
+      const open = f || state.openGames.has(g.key);
+      const groups = !open ? '' : g.groups.map((gr) => {
+        const rows = gr.markets.filter((m) => {
+          if (!words.length) return true;
+          const hay = `${g.title} ${gr.title} ${ALIASES[gr.title] || ''} ${m.label}`.toLowerCase();
+          return words.every((w) => hay.includes(w)) && budget-- > 0;
+        }).map((m) => {
           const t = takenBy.get(m.ticker);
           const mineHere = t && t.playerId === state.me?.id;
           const btn = (side) => {
@@ -201,14 +217,18 @@ function pickSheet() {
         return rows && `<div class="group"><h4>${esc(gr.title)}</h4>${rows}</div>`;
       }).join('');
       const day = new Date(g.date + 'T12:00:00').toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
-      return groups && `<details class="game" ${f ? 'open' : ''}><summary>${esc(g.title)} <span class="mut">${day}</span></summary>${groups}</details>`;
+      if (f && !groups) return '';
+      const legs = g.groups.reduce((n, gr) => n + gr.markets.length, 0);
+      return `<details class="game" ${open ? 'open' : ''}><summary data-game="${esc(g.key)}">${esc(g.title)} <span class="mut">${day} · ${legs} bets</span></summary>${groups}</details>`;
     }).join('');
-    body = games || `<p class="mut">${f ? 'No matches.' : 'Kalshi has no open markets for this week\'s games yet. Check back closer to the weekend.'}</p>`;
+    body = games
+      ? (f && budget < 0 ? '<p class="mut">Showing the first 150 matches. Type more to narrow it down.</p>' : '') + games
+      : `<p class="mut">${f ? 'No matches.' : 'Kalshi has no open markets for this week\'s games yet. Check back closer to the weekend.'}</p>`;
   }
   return `<div class="sheet"><div class="sheet-head">
-      <div class="row" style="margin-bottom:8px"><b class="grow">Pick your Week ${d.week} leg</b><button class="chip" data-act="close">Close</button></div>
-      <input id="filter" type="search" placeholder="Search a team, player, or bet…" value="${esc(state.filter)}">
-      <div class="mut" style="margin-top:6px">Max +${state.catalog?.maxOdds ?? 120}. Greyed-out legs are too long or already taken.</div>
+      <div class="row" style="margin-bottom:8px"><b class="grow">Week ${d.week}: pick your leg</b><button class="chip" data-act="close">Close</button></div>
+      <input id="filter" type="search" placeholder="Search: Bills, Mahomes, touchdowns, spread…" value="${esc(state.filter)}">
+      <div class="mut" style="margin-top:6px">Tap a game or search, then tap YES or NO. Max +${state.catalog?.maxOdds ?? 120}; greyed-out bets are too long or already taken.</div>
     </div><div class="sheet-body">${body}</div></div>`;
 }
 
@@ -220,7 +240,10 @@ function render() {
   html += state.tab === 'week' ? weekView() : state.tab === 'season' ? seasonView() : rulesView();
   if (state.choosingName || (!state.me && state.tab === 'week' && ls.get('seenNames') !== true)) html += nameSheet();
   else if (state.picking) html += pickSheet();
+  const scroll = document.querySelector('.sheet')?.scrollTop;
   app.innerHTML = html;
+  const sheet = document.querySelector('.sheet');
+  if (sheet && scroll) sheet.scrollTop = scroll;
   if (focus) {
     const el = document.getElementById(focus);
     if (el) { el.focus(); if (caret != null && el.setSelectionRange) el.setSelectionRange(caret, caret); }
@@ -235,7 +258,8 @@ async function refresh() {
 }
 
 async function openPicker() {
-  state.picking = true; state.filter = ''; state.catalog = null; render();
+  state.picking = true; state.filter = ''; state.catalog = null; state.openGames = new Set(); render();
+  document.getElementById('filter')?.focus();
   try { state.catalog = await api(`/api/catalog?week=${state.week}`); }
   catch (e) { state.catalog = { error: e.message }; }
   render();
@@ -262,6 +286,14 @@ app.addEventListener('input', (e) => {
 });
 
 app.addEventListener('click', async (e) => {
+  const sum = e.target.closest('summary[data-game]');
+  if (sum) {
+    e.preventDefault();
+    const k = sum.dataset.game;
+    if (state.openGames.has(k)) state.openGames.delete(k); else state.openGames.add(k);
+    render();
+    return;
+  }
   const b = e.target.closest('button, a');
   if (!b) return;
   if (b.dataset.tab) {
@@ -273,7 +305,10 @@ app.addEventListener('click', async (e) => {
   if (b.dataset.name) {
     const p = state.data.players.find((x) => x.id === Number(b.dataset.name));
     state.me = { id: p.id, name: p.name }; ls.set('me', state.me); ls.set('seenNames', true);
-    state.choosingName = false; render(); return;
+    state.choosingName = false; render();
+    // First thing a player wants: find a bet.
+    if (!state.data.locked && !state.data.legs.some((l) => l.playerId === p.id)) openPicker();
+    return;
   }
   if (b.dataset.pick) return pick(b);
   switch (b.dataset.act) {

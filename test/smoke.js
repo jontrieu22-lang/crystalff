@@ -1,4 +1,4 @@
-// End-to-end test: API + PGlite + a fake Kalshi.
+// End-to-end test: API + in-memory store + a fake Kalshi.
 import http from 'node:http';
 import assert from 'node:assert/strict';
 
@@ -41,8 +41,8 @@ const kalshi = http.createServer((req, res) => {
 process.env.KALSHI_BASE = `http://localhost:${kalshi.address().port}`;
 process.env.ADMIN_KEY = 'host';
 
-const { usePglite, createServer } = await import('../dev.js');
-await usePglite();
+const { useMemoryStore, createServer } = await import('../dev.js');
+useMemoryStore();
 const app = createServer().listen(0);
 const base = `http://localhost:${app.address().port}`;
 const call = async (path, method = 'GET', body, admin) => {
