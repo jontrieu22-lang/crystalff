@@ -14,7 +14,7 @@ export const POST = route(async (req) => {
 
   const m = await getMarket(String(b.ticker || ''));
   if (m.status && !['active', 'open'].includes(m.status)) fail(400, 'That market is no longer open on Kalshi');
-  if (!inWeek(m, weekInfo(week))) fail(400, `That game isn't part of Week ${week} (it kicks off before the lock or in another week)`);
+  if (!inWeek(m, weekInfo(week))) fail(400, `That game isn't part of Week ${week} (only Sunday games after the lock count)`);
   const takenBy = (d) => {
     const t = d.legs.find((l) => l.week === week && l.ticker === m.ticker && l.playerId !== playerId);
     if (t) fail(409, `${d.players.find((p) => p.id === t.playerId)?.name || 'Someone'} already has that leg`);

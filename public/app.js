@@ -135,7 +135,7 @@ function rulesView() {
   return `<div class="card"><pre><b>Rules</b>
 
 1. If your leg is the only leg that misses, you're on the hook for next week's $5 automatically (your total that week is $10).
-2. Picks lock Sunday at 9:00 AM PT (12:00 PM ET). Only games kicking off after the lock are available.
+2. Picks lock Sunday at 9:00 AM PT (12:00 PM ET). Only Sunday games kicking off after the lock are available (no Thursday or Monday games).
 3. James Clause: if you put in a poison-pill leg (+600) and it's the only one that doesn't hit, you owe everyone the parlay value without your leg.
 
 <b>How the app works</b>
