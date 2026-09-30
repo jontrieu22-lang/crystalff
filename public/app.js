@@ -14,7 +14,7 @@ const state = {
   tab: 'week',
   week: Number(new URLSearchParams(location.search).get('week')) || null,
   data: null, catalog: null, season: null,
-  picking: false, choosingName: false, filter: '', openGames: new Set(), lines: {},
+  picking: false, choosingName: false, filter: '', oddsMin: '', oddsMax: '', openGames: new Set(), lines: {},
 };
 
 async function api(path, { method = 'GET', body } = {}) {
@@ -215,10 +215,22 @@ function selectedLine(fam, famKey, takenBy) {
   return fam.markets.reduce((best, m) => (Math.abs(yes(m) - 50) < Math.abs(yes(best) - 50) ? m : best));
 }
 
+// Odds filter: American odds typed as "-150", "+200" or "200". Numeric order of
+// American odds matches probability order, so a plain min/max range works.
+const parseOdds = (s) => { const n = Number(String(s).replace(/[\s+]/g, '')); return String(s).trim() && Number.isFinite(n) ? n : null; };
+const ODDS_PRESETS = [
+  ['Big favs', '', '-250'], ['Favs', '-250', '-130'], ['Toss-ups', '-130', '+130'],
+  ['Plus money', '+130', '+300'], ['Long shots', '+300', '+599'], ['💊 +600+', '+600', ''],
+];
+
 function pickSheet() {
   const d = state.data;
   const takenBy = new Map(d.legs.map((l) => [l.ticker, l]));
   const f = state.filter.trim().toLowerCase();
+  const lo = parseOdds(state.oddsMin), hi = parseOdds(state.oddsMax);
+  const oddsOn = lo != null || hi != null;
+  const inRange = (o) => o != null && (lo == null || o >= lo) && (hi == null || o <= hi);
+  const active = f || oddsOn;
   let body;
   if (!state.catalog) body = '<p class="mut">Loading this week\'s Kalshi markets…</p>';
   else if (state.catalog.error) body = `<p class="mut">Couldn't load Kalshi: ${esc(state.catalog.error)}</p>`;
@@ -227,10 +239,12 @@ function pickSheet() {
     let budget = 150;
     const words = f.split(/\s+/).filter(Boolean);
     const games = state.catalog.games.map((g) => {
-      const open = f || state.openGames.has(g.key);
+      const open = active || state.openGames.has(g.key);
       const groups = !open ? '' : g.groups.map((gr) => {
-        const rows = ladders(gr.markets).filter((fam) => {
-          if (!words.length) return true;
+        const markets = oddsOn ? gr.markets.filter((m) => inRange(m.yes?.odds) || inRange(m.no?.odds)) : gr.markets;
+        const rows = ladders(markets).filter((fam) => {
+          if (!active) return true;
+          if (!words.length) return budget-- > 0;
           const hay = `${g.title} ${gr.title} ${ALIASES[gr.title] || ''} ${fam.markets.map((m) => m.label).join(' ')}`.toLowerCase();
           return words.every((w) => hay.includes(w)) && budget-- > 0;
         }).map((fam) => {
@@ -242,7 +256,7 @@ function pickSheet() {
             const sd = m[side];
             if (!sd) return `<button class="side" disabled>${side.toUpperCase()}<b>—</b></button>`;
             const dis = t && !mineHere;
-            return `<button class="side ${mineHere && t.side === side ? 'mine' : ''}" ${dis ? 'disabled' : ''}
+            return `<button class="side ${mineHere && t.side === side ? 'mine' : ''} ${oddsOn && !inRange(sd.odds) ? 'dim' : ''}" ${dis ? 'disabled' : ''}
               data-pick="${esc(m.ticker)}" data-side="${side}" data-label="${esc(m.label)}" data-group="${esc(gr.title)}" data-game="${esc(g.title)}" data-odds="${sd.odds}" ${sd.pill ? `data-pill="1" title="${esc(JAMES)}"` : ''}>
               ${side.toUpperCase()}${sd.pill ? ' 💊' : ''}<b>${odds(sd.odds)}</b></button>`;
           };
@@ -262,19 +276,28 @@ function pickSheet() {
         return rows && `<div class="group"><h4>${esc(gr.title)}</h4>${rows}</div>`;
       }).join('');
       const day = new Date(g.date + 'T12:00:00').toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
-      if (f && !groups) return '';
+      if (active && !groups) return '';
       const legs = g.groups.reduce((n, gr) => n + gr.markets.length, 0);
       return `<details class="game" ${open ? 'open' : ''}><summary data-game="${esc(g.key)}">${esc(g.title)} <span class="mut">${day} · ${legs} bets</span></summary>${groups}</details>`;
     }).join('');
     body = games
-      ? (f && budget < 0 ? '<p class="mut">Showing the first 150 matches. Type more to narrow it down.</p>' : '') + games
-      : `<p class="mut">${f ? 'No matches.' : 'Kalshi has no open markets for this week\'s games yet. Check back closer to the weekend.'}</p>`;
+      ? (active && budget < 0 ? '<p class="mut">Showing the first 150 matches. Narrow the search or odds to see more.</p>' : '') + games
+      : `<p class="mut">${active ? 'No matches.' : 'Kalshi has no open markets for this week\'s games yet. Check back closer to the weekend.'}</p>`;
   }
   return `<div class="sheet"><div class="sheet-head">
       <div class="row" style="margin-bottom:8px"><b class="grow">Week ${d.week}: pick your leg</b><button class="chip" data-act="close">Close</button></div>
       <input id="filter" type="search" placeholder="Search: Bills, Mahomes, touchdowns, spread…" value="${esc(state.filter)}">
-      <div class="mut" style="margin-top:6px">Tap a game or search, then tap YES or NO. 💊 = +${state.catalog?.poisonPill ?? 600} or longer (James Clause). Greyed-out bets are already taken.</div>
-    </div><div class="sheet-body">${body}</div></div>`;
+      <div class="odds-bar">
+        <span class="mut">Odds</span>
+        <input id="omin" autocomplete="off" placeholder="-200" value="${esc(state.oddsMin)}" aria-label="Minimum odds">
+        <span class="mut">to</span>
+        <input id="omax" autocomplete="off" placeholder="+300" value="${esc(state.oddsMax)}" aria-label="Maximum odds">
+        ${oddsOn ? '<button class="chip" data-act="oddsclear">Clear</button>' : ''}
+      </div>
+      <div class="presets">${ODDS_PRESETS.map(([label, a, b]) => `<button class="chip ${state.oddsMin === a && state.oddsMax === b ? 'on' : ''}" data-omin="${a}" data-omax="${b}">${label}</button>`).join('')}</div>
+    </div><div class="sheet-body">
+      <p class="mut help">Tap a game or search, then tap YES or NO. 💊 = +${state.catalog?.poisonPill ?? 600} or longer (James Clause). Crossed-out bets are already taken.</p>
+      ${body}</div></div>`;
 }
 
 function render() {
@@ -303,7 +326,7 @@ async function refresh() {
 }
 
 async function openPicker() {
-  state.picking = true; state.filter = ''; state.catalog = null; state.openGames = new Set(); render();
+  state.picking = true; state.filter = ''; state.oddsMin = ''; state.oddsMax = ''; state.catalog = null; state.openGames = new Set(); render();
   document.getElementById('filter')?.focus();
   try { state.catalog = await api(`/api/catalog?week=${state.week}`); }
   catch (e) { state.catalog = { error: e.message }; }
@@ -333,6 +356,8 @@ app.addEventListener('change', (e) => {
 
 app.addEventListener('input', (e) => {
   if (e.target.id === 'filter') { state.filter = e.target.value; render(); }
+  if (e.target.id === 'omin') { state.oddsMin = e.target.value; render(); }
+  if (e.target.id === 'omax') { state.oddsMax = e.target.value; render(); }
 });
 
 app.addEventListener('click', async (e) => {
@@ -361,7 +386,13 @@ app.addEventListener('click', async (e) => {
     return;
   }
   if (b.dataset.pick) return pick(b);
+  if (b.dataset.omin !== undefined) {
+    const same = state.oddsMin === b.dataset.omin && state.oddsMax === b.dataset.omax;
+    state.oddsMin = same ? '' : b.dataset.omin; state.oddsMax = same ? '' : b.dataset.omax;
+    render(); return;
+  }
   switch (b.dataset.act) {
+    case 'oddsclear': state.oddsMin = ''; state.oddsMax = ''; render(); break;
     case 'who': state.choosingName = true; render(); break;
     case 'close': state.picking = false; state.choosingName = false; ls.set('seenNames', true); render(); break;
     case 'pick': openPicker(); break;
