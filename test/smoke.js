@@ -24,6 +24,7 @@ const events = {
   KXNFLTD: [
     { event_ticker: 'KXNFLTD-26OCT04BUFNE', series_ticker: 'KXNFLTD', title: 'Anytime TD', markets: [
       mk('KXNFLTD-26OCT04BUFNE-JALLEN', 'KXNFLTD-26OCT04BUFNE', 'Josh Allen', 40, 42),
+      mk('KXNFLTD-26OCT04BUFNE-LONG', 'KXNFLTD-26OCT04BUFNE', 'Long Shot', 10, 12), // +733: poison pill
       // Older responses carried integer cents; both are read.
       { ...mk('KXNFLTD-26OCT04BUFNE-JCOOK', 'KXNFLTD-26OCT04BUFNE', 'James Cook'), yes_bid: 55, yes_ask: 57, no_ask_dollars: undefined }] },
   ],
@@ -64,33 +65,36 @@ const [game] = cat.games;
 assert.equal(game.title, 'Buffalo at New England');
 assert.deepEqual(game.groups.map((g) => g.title), ['Winner', 'Touchdowns']);
 const td = game.groups[1];
-assert.deepEqual(td.markets.find((m) => m.label === 'James Cook').yes, { price: 57, odds: -133, ok: true });
-assert.equal(td.markets.find((m) => m.label === 'Josh Allen').yes.ok, false); // +138 > +120
+assert.deepEqual(td.markets.find((m) => m.label === 'James Cook').yes, { price: 57, odds: -133, pill: false });
+assert.equal(td.markets.find((m) => m.label === 'Long Shot').yes.pill, true); // +733 >= +600
 
 // Picking rules.
 const pick = (name, ticker, side) => call('/api/leg', 'POST', { week: 4, playerId: id(name), ticker, side, group: 'Test' });
-assert.match((await pick('Josh', 'KXNFLTD-26OCT04BUFNE-JALLEN', 'yes')).data.error, /Max is \+120/);
+assert.equal((await pick('Josh', 'KXNFLTD-26OCT04BUFNE-JALLEN', 'yes')).data.odds, 138); // no max odds any more
 assert.match((await pick('Josh', 'KXNFLGAME-26OCT01SEALA-SEA', 'yes')).data.error, /isn't part of Week 4/);
 assert.equal((await pick('Josh', 'KXNFLGAME-26OCT04BUFNE-BUF', 'yes')).data.odds, -163);
 assert.equal((await pick('Sam', 'KXNFLGAME-26OCT04BUFNE-BUF', 'no')).status, 409); // same market taken
 assert.equal((await pick('Sam', 'KXNFLTD-26OCT04BUFNE-JCOOK', 'yes')).status, 200);
-assert.equal((await pick('Keane', 'KXNFLTD-26OCT04BUFNE-JALLEN', 'no')).data.odds, -150);
+assert.equal((await pick('Keane', 'KXNFLTD-26OCT04BUFNE-LONG', 'yes')).data.odds, 733);
 assert.equal((await pick('Josh', 'KXNFLGAME-26OCT04BUFNE-NE', 'no')).status, 200); // replaces Josh's leg
 
 wk = (await call('/api/week?week=4')).data;
 assert.equal(wk.legs.length, 3);
 assert.equal(wk.waitingOn.length, 9);
 assert.equal(wk.legs.find((l) => l.player === 'Josh').odds, -163); // NO at 100 - 38 = 62
+assert.equal(wk.legs.find((l) => l.player === 'Keane').pill, true);
 
-// After lock: no changes; Kalshi settles; Keane is the only miss.
+// After lock: no changes; Kalshi settles; Keane's poison pill is the only miss.
 now = Date.parse('2026-10-03T18:00:01Z');
 assert.equal((await pick('Eric', 'KXNFLGAME-26OCT04BUFNE-BUF', 'yes')).status, 403);
 Object.assign(markets['KXNFLGAME-26OCT04BUFNE-NE'], { status: 'finalized', result: 'no' });
 Object.assign(markets['KXNFLTD-26OCT04BUFNE-JCOOK'], { status: 'finalized', result: 'yes' });
-Object.assign(markets['KXNFLTD-26OCT04BUFNE-JALLEN'], { status: 'finalized', result: 'yes' });
+Object.assign(markets['KXNFLTD-26OCT04BUFNE-LONG'], { status: 'finalized', result: 'no' });
 wk = (await call('/api/week?week=4')).data;
 assert.deepEqual(wk.legs.map((l) => [l.player, l.status]), [['Sam', 'hit'], ['Keane', 'miss'], ['Josh', 'hit']]);
 assert.equal(wk.soleMiss, 'Keane');
+// James Clause: $15 pot at the other two legs' odds (57c and 62c -> +183) = $42.
+assert.deepEqual(wk.jamesClause, { player: 'Keane', owes: 42 });
 assert.equal(wk.parlay.settled, true);
 
 // Host tools.

@@ -9,7 +9,7 @@ Kalshi is only read for prices and results. Nobody needs a Kalshi account, and n
 - **Weeks** follow the NFL calendar (`SEASON_START` = Thursday of Week 1, default 2026-09-10).
   Picks lock **Saturday 2:00 PM ET**. The app opens on the next week each Tuesday at 4 AM ET.
 - **Legs** come only from Kalshi's weekly NFL series: winner, spread, total, team total, touchdowns,
-  and passing/rushing/receiving yards, for games kicking off after the lock (Kalshi's `occurrence_datetime`). Anything over **+120** is greyed out.
+  and passing/rushing/receiving yards, for games kicking off after the lock (Kalshi's `occurrence_datetime`). Anything at **+600** or longer is marked 💊 with the James Clause warning.
   One leg per person, and no two people can take the same market.
 - **Odds** are recorded at the Kalshi ask price when you pick. The parlay's estimated odds multiply those together.
 - **Results** fill in automatically from Kalshi's market result, checked whenever the page loads and by a daily cron.
@@ -27,7 +27,7 @@ Kalshi is only read for prices and results. Nobody needs a Kalshi account, and n
    - `CRON_SECRET`: any random string. Vercel sends it to the daily settle cron.
 4. Deploy. The 2025 roster is seeded on first use.
 
-Optional variables: `SEASON_START`, `MAX_ODDS` (120), `STAKE` (5), `NFL_SERIES` (e.g.
+Optional variables: `SEASON_START`, `POISON_PILL` (600), `STAKE` (5), `NFL_SERIES` (e.g.
 `KXNFLGAME:Winner,KXNFLTD:Touchdowns` to change which Kalshi series are offered), `KALSHI_BASE`.
 
 ## Local dev

@@ -1,7 +1,7 @@
 import { load, update } from '../lib/store.js';
 import { body, fail, isAdmin, route } from '../lib/http.js';
 import { gameOf, getMarket, inWeek, sidePrices } from '../lib/kalshi.js';
-import { american, fmtOdds, isLocked, legAllowed, MAX_ODDS, weekInfo } from '../lib/rules.js';
+import { american, isLocked, weekInfo } from '../lib/rules.js';
 
 // Add or replace your one leg for the week.
 export const POST = route(async (req) => {
@@ -22,7 +22,6 @@ export const POST = route(async (req) => {
   takenBy(await load());
   const price = sidePrices(m)[b.side];
   if (!price) fail(400, 'No price on Kalshi for that side right now');
-  if (!legAllowed(price)) fail(400, `That leg is ${fmtOdds(american(price))}. Max is +${MAX_ODDS}.`);
 
   await update((d) => {
     if (!d.players.some((p) => p.id === playerId)) fail(404, 'Unknown player');
