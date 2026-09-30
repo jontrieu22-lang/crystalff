@@ -1,4 +1,4 @@
-import { q } from '../lib/db.js';
+import { update } from '../lib/store.js';
 import { body, fail, requireAdmin, route } from '../lib/http.js';
 
 // Host tools: week details and roster.
@@ -9,18 +9,23 @@ export const POST = route(async (req) => {
     case 'check':
       return { ok: true };
     case 'week':
-      await q(`INSERT INTO weeks (week, placer, actual_odds, note) VALUES ($1, $2, $3, $4)
-               ON CONFLICT (week) DO UPDATE SET placer = $2, actual_odds = $3, note = $4`,
-        [Number(b.week), b.placer || null, b.actualOdds || null, b.note || null]);
+      await update((d) => { d.weeks[Number(b.week)] = { placer: b.placer || '', actualOdds: b.actualOdds || '', note: b.note || '' }; });
       return { ok: true };
     case 'addPlayer': {
       const name = String(b.name || '').trim().slice(0, 30);
       if (!name) fail(400, 'Name required');
-      await q('INSERT INTO players (name) VALUES ($1) ON CONFLICT DO NOTHING', [name]);
+      await update((d) => {
+        if (d.players.some((p) => p.name.toLowerCase() === name.toLowerCase())) fail(409, 'Name taken');
+        d.players.push({ id: d.nextId++, name });
+      });
       return { ok: true };
     }
     case 'removePlayer':
-      await q('DELETE FROM players WHERE id = $1', [Number(b.playerId)]);
+      await update((d) => {
+        const id = Number(b.playerId);
+        d.players = d.players.filter((p) => p.id !== id);
+        d.legs = d.legs.filter((l) => l.playerId !== id);
+      });
       return { ok: true };
     default:
       fail(400, 'Unknown action');
