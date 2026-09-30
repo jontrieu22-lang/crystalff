@@ -8,7 +8,8 @@ let now = Date.parse('2026-09-30T12:00:00Z');
 Date.now = () => now;
 
 // Shaped like live Kalshi responses: dollar-string prices, occurrence_datetime = kickoff.
-const kick = (event) => (/OCT01/.test(event) ? '2026-10-02T00:15:00Z' : '2026-10-04T17:00:00Z');
+const KICKOFFS = { OCT01: '2026-10-02T00:15:00Z', OCT04SF: '2026-10-05T00:20:00Z', OCT05: '2026-10-06T00:15:00Z' };
+const kick = (event) => Object.entries(KICKOFFS).find(([k]) => event.includes(k))?.[1] || '2026-10-04T17:00:00Z';
 const d = (c) => (c == null ? undefined : (c / 100).toFixed(4));
 const mk = (ticker, event, sub, yes_bid, yes_ask) => ({ ticker, event_ticker: event, title: sub, yes_sub_title: sub, no_sub_title: sub, status: 'active', result: '',
   yes_bid_dollars: d(yes_bid), yes_ask_dollars: d(yes_ask), no_ask_dollars: d(yes_bid == null ? null : 100 - yes_bid), occurrence_datetime: kick(event) });
@@ -17,6 +18,12 @@ const events = {
     { event_ticker: 'KXNFLGAME-26OCT04BUFNE', series_ticker: 'KXNFLGAME', title: 'Buffalo at New England', markets: [
       mk('KXNFLGAME-26OCT04BUFNE-BUF', 'KXNFLGAME-26OCT04BUFNE', 'Buffalo', 60, 62),
       mk('KXNFLGAME-26OCT04BUFNE-NE', 'KXNFLGAME-26OCT04BUFNE', 'New England', 38, 40)] },
+    // Sunday night (8:20 PM ET = Monday in UTC): included.
+    { event_ticker: 'KXNFLGAME-26OCT04SFDAL', series_ticker: 'KXNFLGAME', title: 'SF at Dallas', markets: [
+      mk('KXNFLGAME-26OCT04SFDAL-SF', 'KXNFLGAME-26OCT04SFDAL', 'San Francisco', 45, 47)] },
+    // Monday night: excluded.
+    { event_ticker: 'KXNFLGAME-26OCT05DALCHI', series_ticker: 'KXNFLGAME', title: 'Dallas at Chicago', markets: [
+      mk('KXNFLGAME-26OCT05DALCHI-DAL', 'KXNFLGAME-26OCT05DALCHI', 'Dallas', 50, 52)] },
     // Thursday game: before the Sunday lock, must be excluded.
     { event_ticker: 'KXNFLGAME-26OCT01SEALA', series_ticker: 'KXNFLGAME', title: 'Seattle at LA', markets: [
       mk('KXNFLGAME-26OCT01SEALA-SEA', 'KXNFLGAME-26OCT01SEALA', 'Seattle', 50, 52)] },
@@ -60,7 +67,7 @@ const id = (name) => wk.players.find((p) => p.name === name).id;
 
 // Catalog: only NFL games after the lock, grouped by game; both price formats read.
 const cat = (await call('/api/catalog?week=4')).data;
-assert.equal(cat.games.length, 1);
+assert.deepEqual(cat.games.map((g) => g.title), ['Buffalo at New England', 'SF at Dallas']); // Sunday only
 const [game] = cat.games;
 assert.equal(game.title, 'Buffalo at New England');
 assert.deepEqual(game.groups.map((g) => g.title), ['Winner', 'Touchdowns']);
@@ -72,6 +79,7 @@ assert.equal(td.markets.find((m) => m.label === 'Long Shot').yes.pill, true); //
 const pick = (name, ticker, side) => call('/api/leg', 'POST', { week: 4, playerId: id(name), ticker, side, group: 'Test' });
 assert.equal((await pick('Josh', 'KXNFLTD-26OCT04BUFNE-JALLEN', 'yes')).data.odds, 138); // no max odds any more
 assert.match((await pick('Josh', 'KXNFLGAME-26OCT01SEALA-SEA', 'yes')).data.error, /isn't part of Week 4/);
+assert.match((await pick('Josh', 'KXNFLGAME-26OCT05DALCHI-DAL', 'yes')).data.error, /isn't part of Week 4/); // Monday
 assert.equal((await pick('Josh', 'KXNFLGAME-26OCT04BUFNE-BUF', 'yes')).data.odds, -163);
 assert.equal((await pick('Sam', 'KXNFLGAME-26OCT04BUFNE-BUF', 'no')).status, 409); // same market taken
 assert.equal((await pick('Sam', 'KXNFLTD-26OCT04BUFNE-JCOOK', 'yes')).status, 200);
