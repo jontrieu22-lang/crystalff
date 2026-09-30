@@ -21,7 +21,7 @@ const events = {
     // Sunday night (8:20 PM ET = Monday in UTC): included.
     { event_ticker: 'KXNFLGAME-26OCT04SFDAL', series_ticker: 'KXNFLGAME', title: 'SF at Dallas', markets: [
       mk('KXNFLGAME-26OCT04SFDAL-SF', 'KXNFLGAME-26OCT04SFDAL', 'San Francisco', 45, 47)] },
-    // Monday night: excluded.
+    // Monday night: included.
     { event_ticker: 'KXNFLGAME-26OCT05DALCHI', series_ticker: 'KXNFLGAME', title: 'Dallas at Chicago', markets: [
       mk('KXNFLGAME-26OCT05DALCHI-DAL', 'KXNFLGAME-26OCT05DALCHI', 'Dallas', 50, 52)] },
     // Thursday game: before the Sunday lock, must be excluded.
@@ -67,7 +67,7 @@ const id = (name) => wk.players.find((p) => p.name === name).id;
 
 // Catalog: only NFL games after the lock, grouped by game; both price formats read.
 const cat = (await call('/api/catalog?week=4')).data;
-assert.deepEqual(cat.games.map((g) => g.title), ['Buffalo at New England', 'SF at Dallas']); // Sunday only
+assert.deepEqual(cat.games.map((g) => g.title), ['Buffalo at New England', 'SF at Dallas', 'Dallas at Chicago']); // Sun + Mon, not Thu
 const [game] = cat.games;
 assert.equal(game.title, 'Buffalo at New England');
 assert.deepEqual(game.groups.map((g) => g.title), ['Winner', 'Touchdowns']);
@@ -79,7 +79,6 @@ assert.equal(td.markets.find((m) => m.label === 'Long Shot').yes.pill, true); //
 const pick = (name, ticker, side) => call('/api/leg', 'POST', { week: 4, playerId: id(name), ticker, side, group: 'Test' });
 assert.equal((await pick('Josh', 'KXNFLTD-26OCT04BUFNE-JALLEN', 'yes')).data.odds, 138); // no max odds any more
 assert.match((await pick('Josh', 'KXNFLGAME-26OCT01SEALA-SEA', 'yes')).data.error, /isn't part of Week 4/);
-assert.match((await pick('Josh', 'KXNFLGAME-26OCT05DALCHI-DAL', 'yes')).data.error, /isn't part of Week 4/); // Monday
 assert.equal((await pick('Josh', 'KXNFLGAME-26OCT04BUFNE-BUF', 'yes')).data.odds, -163);
 assert.equal((await pick('Sam', 'KXNFLGAME-26OCT04BUFNE-BUF', 'no')).status, 409); // same market taken
 assert.equal((await pick('Sam', 'KXNFLTD-26OCT04BUFNE-JCOOK', 'yes')).status, 200);
