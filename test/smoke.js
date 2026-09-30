@@ -17,7 +17,7 @@ const events = {
     { event_ticker: 'KXNFLGAME-26OCT04BUFNE', series_ticker: 'KXNFLGAME', title: 'Buffalo at New England', markets: [
       mk('KXNFLGAME-26OCT04BUFNE-BUF', 'KXNFLGAME-26OCT04BUFNE', 'Buffalo', 60, 62),
       mk('KXNFLGAME-26OCT04BUFNE-NE', 'KXNFLGAME-26OCT04BUFNE', 'New England', 38, 40)] },
-    // Thursday game: before the Saturday lock, must be excluded.
+    // Thursday game: before the Sunday lock, must be excluded.
     { event_ticker: 'KXNFLGAME-26OCT01SEALA', series_ticker: 'KXNFLGAME', title: 'Seattle at LA', markets: [
       mk('KXNFLGAME-26OCT01SEALA-SEA', 'KXNFLGAME-26OCT01SEALA', 'Seattle', 50, 52)] },
   ],
@@ -54,7 +54,7 @@ const call = async (path, method = 'GET', body, admin) => {
 // Roster is seeded from the spreadsheet; current week computed from the date.
 let wk = (await call('/api/week')).data;
 assert.equal(wk.week, 4);
-assert.equal(wk.locksAt, '2026-10-03T18:00:00.000Z'); // Sat 2 PM EDT
+assert.equal(wk.locksAt, '2026-10-04T16:00:00.000Z'); // Sun 9 AM PDT
 assert.equal(wk.players.length, 12);
 const id = (name) => wk.players.find((p) => p.name === name).id;
 
@@ -85,7 +85,7 @@ assert.equal(wk.legs.find((l) => l.player === 'Josh').odds, -163); // NO at 100 
 assert.equal(wk.legs.find((l) => l.player === 'Keane').pill, true);
 
 // After lock: no changes; Kalshi settles; Keane's poison pill is the only miss.
-now = Date.parse('2026-10-03T18:00:01Z');
+now = Date.parse('2026-10-04T16:00:01Z');
 assert.equal((await pick('Eric', 'KXNFLGAME-26OCT04BUFNE-BUF', 'yes')).status, 403);
 Object.assign(markets['KXNFLGAME-26OCT04BUFNE-NE'], { status: 'finalized', result: 'no' });
 Object.assign(markets['KXNFLTD-26OCT04BUFNE-JCOOK'], { status: 'finalized', result: 'yes' });

@@ -7,7 +7,7 @@ Kalshi is only read for prices and results. Nobody needs a Kalshi account, and n
 ## How it works
 
 - **Weeks** follow the NFL calendar (`SEASON_START` = Thursday of Week 1, default 2026-09-10).
-  Picks lock **Saturday 2:00 PM ET**. The app opens on the next week each Tuesday at 4 AM ET.
+  Picks lock **Sunday 9:00 AM PT** (noon ET), and only games kicking off after that are offered. The app opens on the next week each Tuesday at 4 AM ET.
 - **Legs** come only from Kalshi's weekly NFL series: winner, spread, total, team total, touchdowns,
   and passing/rushing/receiving yards, for games kicking off after the lock (Kalshi's `occurrence_datetime`). Anything at **+600** or longer is marked 💊 with the James Clause warning.
   One leg per person, and no two people can take the same market.

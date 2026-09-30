@@ -44,7 +44,7 @@ function countdown(iso) {
   const d = Math.floor(ms / 864e5), h = Math.floor(ms / 36e5) % 24, m = Math.floor(ms / 6e4) % 60;
   return d ? `${d}d ${h}h` : h ? `${h}h ${m}m` : `${m}m`;
 }
-const lockLabel = (iso) => new Date(iso).toLocaleString('en-US', { timeZone: 'America/New_York', weekday: 'short', hour: 'numeric', minute: '2-digit' }) + ' ET';
+const lockLabel = (iso) => new Date(iso).toLocaleString('en-US', { timeZone: 'America/Los_Angeles', weekday: 'short', hour: 'numeric', minute: '2-digit' }) + ' PT';
 
 // ---------- views ----------
 
@@ -135,7 +135,7 @@ function rulesView() {
   return `<div class="card"><pre><b>Rules</b>
 
 1. If your leg is the only leg that misses, you're on the hook for next week's $5 automatically (your total that week is $10).
-2. Place by Saturday at 2:00 PM ET. The app locks picks then, and only games after the lock are available.
+2. Picks lock Sunday at 9:00 AM PT (12:00 PM ET). Only games kicking off after the lock are available.
 3. James Clause: if you put in a poison-pill leg (+600) and it's the only one that doesn't hit, you owe everyone the parlay value without your leg.
 
 <b>How the app works</b>
