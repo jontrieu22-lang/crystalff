@@ -92,7 +92,8 @@ function weekView() {
     </div>
   </div>
   ${banner}
-  ${!d.locked && state.me ? `<button class="btn" data-act="pick" style="margin-bottom:12px">${mine ? '🔍 Change my leg' : "🔍 Search this week's NFL bets"}</button>` : ''}
+  ${!d.locked && state.me ? `<button class="btn" data-act="pick" style="margin-bottom:${mine ? 8 : 12}px">${mine ? '🔍 Change my leg' : "🔍 Search this week's NFL bets"}</button>` : ''}
+  ${!d.locked && mine ? `<button class="btn ghost" data-act="rmmine" style="margin-bottom:12px">Remove my leg</button>` : ''}
   ${!state.me ? `<button class="btn" data-act="who" style="margin-bottom:12px">Tap your name to play</button>` : ''}
   <div class="card">
     <div class="row" style="margin-bottom:6px">
@@ -396,6 +397,13 @@ app.addEventListener('click', async (e) => {
     case 'who': state.choosingName = true; render(); break;
     case 'close': state.picking = false; state.choosingName = false; ls.set('seenNames', true); render(); break;
     case 'pick': openPicker(); break;
+    case 'rmmine': {
+      const leg = state.data.legs.find((l) => l.playerId === state.me?.id);
+      if (!leg || !confirm(`Remove your leg (${leg.label} ${leg.side.toUpperCase()})? You can pick again any time before the lock.`)) return;
+      try { await api('/api/leg', { method: 'DELETE', body: { week: state.week, playerId: state.me.id } }); toast('Leg removed'); refresh(); }
+      catch (err) { toast(err.message); }
+      break;
+    }
     case 'prev': if (state.week > 1) { state.week--; refresh(); } break;
     case 'next': if (state.week < 22) { state.week++; refresh(); } break;
     case 'host': {
