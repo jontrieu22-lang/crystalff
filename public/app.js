@@ -158,6 +158,7 @@ function hostPanel() {
     <label class="mut">Remove a leg (works after lock)</label>
     <select id="h-leg">${d.legs.map((l) => `<option value="${l.playerId}">${esc(l.player)}: ${esc(l.label)}</option>`).join('')}</select>
     <button class="btn ghost" data-act="rmleg" style="margin-top:6px">Remove leg</button>
+    <button class="btn ghost" data-act="clearweek" style="margin-top:6px;color:var(--bad);border-color:var(--bad)">Clear all picks for Week ${d.week}</button>
     <hr style="border-color:var(--line)">
     <label class="mut">Add player</label><input id="h-name" placeholder="Name">
     <button class="btn ghost" data-act="addplayer" style="margin-top:6px">Add</button>
@@ -377,6 +378,9 @@ app.addEventListener('click', async (e) => {
     }
     case 'hostout': e.preventDefault(); state.host = ''; ls.set('hostKey', ''); render(); break;
     case 'saveweek': host('week', { placer: $('h-placer'), actualOdds: $('h-odds'), note: $('h-note') }); break;
+    case 'clearweek':
+      if (confirm(`Delete every pick for Week ${state.week} (${state.data.legs.length} legs)? This can't be undone.`)) host('clearWeek');
+      break;
     case 'addplayer': host('addPlayer', { name: $('h-name') }); break;
     case 'rmplayer': if (confirm('Remove this player and all their legs?')) host('removePlayer', { playerId: $('h-rm') }); break;
     case 'rmleg':

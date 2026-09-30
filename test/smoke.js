@@ -106,6 +106,11 @@ const s = (await call('/api/season')).data;
 assert.equal(s.table.find((r) => r.player === 'Keane').soleMisses, 1);
 assert.equal(s.table[0].hitRate, 1);
 
+// Host can wipe a week's picks.
+assert.equal((await call('/api/admin', 'POST', { action: 'clearWeek', week: 4 })).status, 403);
+assert.equal((await call('/api/admin', 'POST', { action: 'clearWeek', week: 4 }, 'host')).data.removed, 3);
+assert.equal((await call('/api/week?week=4')).data.legs.length, 0);
+
 console.log('smoke test passed');
 Date.now = realNow;
 kalshi.close(); app.close(); process.exit(0);
