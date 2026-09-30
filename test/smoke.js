@@ -93,8 +93,8 @@ Object.assign(markets['KXNFLTD-26OCT04BUFNE-LONG'], { status: 'finalized', resul
 wk = (await call('/api/week?week=4')).data;
 assert.deepEqual(wk.legs.map((l) => [l.player, l.status]), [['Sam', 'hit'], ['Keane', 'miss'], ['Josh', 'hit']]);
 assert.equal(wk.soleMiss, 'Keane');
-// James Clause: $15 pot at the other two legs' odds (57c and 62c -> +183) = $42.
-assert.deepEqual(wk.jamesClause, { player: 'Keane', owes: 42 });
+assert.deepEqual(wk.jamesClause, { player: 'Keane', owes: 14 }); // $5 stake at +183 (57c x 62c)
+assert.equal(wk.parlay.stake, 5); // flat $5 pot, not per leg
 assert.equal(wk.parlay.settled, true);
 
 // Host tools.
