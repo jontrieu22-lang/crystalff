@@ -295,8 +295,9 @@ function pickSheet() {
         ${oddsOn ? '<button class="chip" data-act="oddsclear">Clear</button>' : ''}
       </div>
       <div class="presets">${ODDS_PRESETS.map(([label, a, b]) => `<button class="chip ${state.oddsMin === a && state.oddsMax === b ? 'on' : ''}" data-omin="${a}" data-omax="${b}">${label}</button>`).join('')}</div>
-      <div class="mut" style="margin-top:6px">Tap a game or search, then tap YES or NO. 💊 = +${state.catalog?.poisonPill ?? 600} or longer (James Clause). Greyed-out bets are already taken.</div>
-    </div><div class="sheet-body">${body}</div></div>`;
+    </div><div class="sheet-body">
+      <p class="mut help">Tap a game or search, then tap YES or NO. 💊 = +${state.catalog?.poisonPill ?? 600} or longer (James Clause). Crossed-out bets are already taken.</p>
+      ${body}</div></div>`;
 }
 
 function render() {
