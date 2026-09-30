@@ -1,6 +1,6 @@
 import { q } from '../lib/db.js';
 import { body, fail, isAdmin, route } from '../lib/http.js';
-import { gameOf, getMarket, sidePrices } from '../lib/kalshi.js';
+import { gameOf, getMarket, inWeek, sidePrices } from '../lib/kalshi.js';
 import { fmtOdds, isLocked, legAllowed, MAX_ODDS, weekInfo, american } from '../lib/rules.js';
 
 const player = async (id) => (await q('SELECT * FROM players WHERE id = $1', [id]))[0] || fail(404, 'Unknown player');
@@ -17,8 +17,7 @@ export const POST = route(async (req) => {
   const m = await getMarket(String(b.ticker || ''));
   if (m.status && !['active', 'open'].includes(m.status)) fail(400, 'That market is no longer open on Kalshi');
   const g = gameOf(m.event_ticker || '');
-  const info = weekInfo(week);
-  if (g.date && (g.date < info.lockDate || g.date > info.lastDate)) fail(400, `That game isn't part of Week ${week}`);
+  if (!inWeek(m, weekInfo(week))) fail(400, `That game isn't part of Week ${week} (it kicks off before the lock or in another week)`);
   const taken = await q('SELECT p.name FROM legs l JOIN players p ON p.id = l.player_id WHERE l.week = $1 AND l.ticker = $2 AND l.player_id <> $3', [week, m.ticker, p.id]);
   if (taken.length) fail(409, `${taken[0].name} already has that leg`);
   const price = sidePrices(m)[b.side];
@@ -26,8 +25,7 @@ export const POST = route(async (req) => {
   if (!legAllowed(price)) fail(400, `That leg is ${fmtOdds(american(price))}. Max is +${MAX_ODDS}.`);
 
 
-  const group = String(b.group || '').slice(0, 60);
-  const label = `${group ? group + ': ' : ''}${m.yes_sub_title || m.subtitle || m.title}`;
+  const label = String(m.title || m.yes_sub_title || m.ticker).slice(0, 120);
   await q('DELETE FROM legs WHERE week = $1 AND player_id = $2', [week, p.id]);
   await q(`INSERT INTO legs (week, player_id, ticker, game, label, side, price) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
     [week, p.id, m.ticker, String(b.game || g.teams || '').slice(0, 80), label, b.side, price]);
