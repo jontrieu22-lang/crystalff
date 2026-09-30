@@ -111,6 +111,14 @@ assert.equal((await call('/api/admin', 'POST', { action: 'clearWeek', week: 4 })
 assert.equal((await call('/api/admin', 'POST', { action: 'clearWeek', week: 4 }, 'host')).data.removed, 3);
 assert.equal((await call('/api/week?week=4')).data.legs.length, 0);
 
+// Storage: a backend whose version check never matches (the bug that broke saves in
+// production) must still save, on the forced last attempt.
+const store = await import('../lib/store.js');
+const mem = store.memoryBackend();
+store.setBackend({ read: async () => ({ ...(await mem.read()), etag: 'stale' }), write: (d, prev, o) => mem.write(d, prev, o) });
+await store.update((d) => { d.weeks[9] = { note: 'saved' }; });
+assert.equal((await mem.read()).data.weeks[9].note, 'saved');
+
 console.log('smoke test passed');
 Date.now = realNow;
 kalshi.close(); app.close(); process.exit(0);
