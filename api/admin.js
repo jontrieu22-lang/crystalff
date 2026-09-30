@@ -11,6 +11,17 @@ export const POST = route(async (req) => {
     case 'week':
       await update((d) => { d.weeks[Number(b.week)] = { placer: b.placer || '', actualOdds: b.actualOdds || '', note: b.note || '' }; });
       return { ok: true };
+    case 'clearWeek': {
+      const week = Number(b.week);
+      if (!week) fail(400, 'week required');
+      let removed = 0;
+      await update((d) => {
+        const before = d.legs.length;
+        d.legs = d.legs.filter((l) => l.week !== week);
+        removed = before - d.legs.length;
+      });
+      return { ok: true, removed };
+    }
     case 'addPlayer': {
       const name = String(b.name || '').trim().slice(0, 30);
       if (!name) fail(400, 'Name required');
