@@ -32,6 +32,9 @@ export const POST = route(async (req) => {
       game: String(b.game || gameOf(m.event_ticker || '').teams || '').slice(0, 80),
       label: String(m.title || m.yes_sub_title || m.ticker).slice(0, 120),
       side: b.side, price, outcome: null, createdAt: new Date().toISOString(),
+      // Kept for live tracking: when the game starts and the line in structured form.
+      kickoff: m.occurrence_datetime || null, event: m.event_ticker || null,
+      line: { floor: m.floor_strike ?? null, cap: m.cap_strike ?? null, type: m.strike_type || null, custom: m.custom_strike ?? null, sub: m.yes_sub_title || null },
     });
   });
   return { ok: true, price, odds: american(price) };
