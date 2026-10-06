@@ -44,6 +44,10 @@ const kalshi = http.createServer((req, res) => {
   let body;
   if (u.pathname === '/events') body = { events: events[u.searchParams.get('series_ticker')] || [], cursor: '' };
   else if (u.pathname.startsWith('/markets/') && markets[ticker]) body = { market: markets[ticker] };
+  else if (u.pathname.startsWith('/events/')) {
+    const ev = Object.values(events).flat().find((e) => e.event_ticker === ticker);
+    if (ev) body = { event: ev };
+  }
   res.writeHead(body ? 200 : 404, { 'content-type': 'application/json' }).end(JSON.stringify(body || {}));
 }).listen(0);
 process.env.KALSHI_BASE = `http://localhost:${kalshi.address().port}`;
@@ -149,6 +153,22 @@ assert.equal((await call('/api/week?week=4')).data.placer, 'Ethan');
 const s = (await call('/api/season')).data;
 assert.equal(s.table.find((r) => r.player === 'Keane').soleMisses, 1);
 assert.equal(s.table[0].hitRate, 1);
+
+// Test mode (every deployment but production): any Kalshi market, even after the lock.
+const found = (await call('/api/test?q=' + encodeURIComponent('https://kalshi.com/markets/kxnflgame/nfl-game/kxnflgame-26oct05dalchi'))).data;
+assert.equal(found.title, 'Dallas at Chicago');
+assert.deepEqual(found.markets.map((m) => m.ticker), ['KXNFLGAME-26OCT05DALCHI-DAL']);
+assert.equal((await call('/api/test?q=KXNFLGAME-26OCT01SEALA-SEA')).data.markets.length, 1); // a market ticker works too
+assert.equal((await call('/api/leg', 'POST', { week: 4, playerId: id('Alex'), ticker: 'KXNFLGAME-26OCT01SEALA-SEA', side: 'yes', test: true })).status, 200);
+let tl = (await call('/api/week?week=4')).data.legs.find((l) => l.player === 'Alex');
+assert.equal(tl.phase, 'live'); // no start time for test picks
+assert.equal((await call('/api/week?week=4')).data.testMode, true);
+process.env.VERCEL_ENV = 'production';
+assert.equal((await call('/api/leg', 'POST', { week: 4, playerId: id('Alex'), ticker: 'KXNFLGAME-26OCT01SEALA-SEA', side: 'yes', test: true })).status, 403);
+assert.equal((await call('/api/test?q=KXNFLGAME-26OCT01SEALA-SEA')).status, 404);
+assert.equal((await call('/api/week?week=4')).data.testMode, false);
+delete process.env.VERCEL_ENV;
+assert.equal((await call('/api/leg', 'DELETE', { week: 4, playerId: id('Alex') }, 'host')).status, 200);
 
 // Host can wipe a week's picks.
 assert.equal((await call('/api/admin', 'POST', { action: 'clearWeek', week: 4 })).status, 403);

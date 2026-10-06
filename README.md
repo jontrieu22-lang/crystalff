@@ -31,6 +31,12 @@ Kalshi is only read for prices and results. Nobody needs a Kalshi account, and n
 Optional variables: `SEASON_START`, `POISON_PILL` (600), `STAKE` (5, total stake on the parlay), `NFL_SERIES` (e.g.
 `KXNFLGAME:Winner,KXNFLTD:Touchdowns` to change which Kalshi series are offered), `KALSHI_BASE`.
 
+## Dev vs production
+
+- **Production** is the `main` branch at crystalff.vercel.app, using `league.json`.
+- **Dev** is the `dev` branch (and every other preview deployment). It uses a separate `league-preview.json`, so nothing there touches the real league.
+- **Test mode** is on everywhere except production. A 🧪 card on the week page takes any kalshi.com link or ticker (any sport, any time), and lets you pick legs for anyone to try live tracking. It skips the lock and NFL-only rules. Clear the test picks from the same card.
+
 ## Local dev
 
 ```

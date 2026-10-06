@@ -14,7 +14,7 @@ const state = {
   tab: 'week',
   week: Number(new URLSearchParams(location.search).get('week')) || null,
   data: null, catalog: null, season: null,
-  picking: false, choosingName: false, filter: '', oddsMin: '', oddsMax: '', openGames: new Set(), lines: {},
+  picking: false, choosingName: false, testQ: '', testEvent: null, testFor: null, filter: '', oddsMin: '', oddsMax: '', openGames: new Set(), lines: {},
 };
 
 async function api(path, { method = 'GET', body } = {}) {
@@ -141,7 +141,7 @@ function weekView() {
       <div class="grow"><b>The parlay</b> <span class="mut">${d.legs.length} leg${d.legs.length === 1 ? '' : 's'}</span></div>
       <div class="odds">${odds(p.odds)}</div>
     </div>
-    ${d.locked && d.legs.length && !p.settled ? liveSummary(d) : ''}
+    ${(d.locked || p.live) && d.legs.length && !p.settled ? liveSummary(d) : ''}
     ${legs || '<p class="mut">No legs yet. Be the first.</p>'}
     ${d.waitingOn.length && !d.locked ? `<p class="mut">Waiting on: ${d.waitingOn.map(esc).join(', ')}</p>` : ''}
     ${d.waitingOn.length && d.locked ? `<p class="mut">No leg: ${d.waitingOn.map(esc).join(', ')}</p>` : ''}
@@ -155,6 +155,7 @@ function weekView() {
     ${d.note ? `<p class="mut">${esc(d.note)}</p>` : ''}
     ${p.hits || p.misses ? `<p class="mut">${p.hits} hit · ${p.misses} missed · ${p.pending} pending</p>` : ''}
   </div>
+  ${d.testMode ? testPanel() : ''}
   ${hostPanel()}`;
 }
 
@@ -185,6 +186,24 @@ function rulesView() {
 • One leg per person per week, and no two people can take the same leg.
 • Legs and odds come live from Kalshi. No account or money needed in the app.
 • Odds are locked in when you pick. Results fill in automatically when Kalshi settles the market.</pre></div>`;
+}
+
+// Dev/preview only: mock-pick any live Kalshi market to try live tracking.
+function testPanel() {
+  const d = state.data, ev = state.testEvent;
+  const forId = state.testFor || state.me?.id || d.players[0]?.id;
+  const side = (m, s) => m[s] ? `<button class="side" data-act="tpick" data-ticker="${esc(m.ticker)}" data-side="${s}">${s.toUpperCase()}<b>${odds(m[s].odds)}</b></button>` : '';
+  return `<div class="card test">
+    <b>🧪 Test mode</b> <span class="mut">dev only, separate data from the real league</span>
+    <p class="mut">Paste a kalshi.com link or ticker for any live game, then pick legs for anyone.</p>
+    <div class="row"><input id="t-q" value="${esc(state.testQ)}" placeholder="https://kalshi.com/markets/…"><button class="chip" data-act="tfind">Find</button></div>
+    ${ev?.error ? `<p class="mut">${esc(ev.error)}</p>` : ''}
+    ${ev?.markets ? `<div class="row" style="margin-top:8px"><span class="mut">Pick for</span>
+        <select id="t-for" style="width:auto">${d.players.map((pl) => `<option value="${pl.id}" ${pl.id === forId ? 'selected' : ''}>${esc(pl.name)}</option>`).join('')}</select></div>
+      <p><b>${esc(ev.title)}</b></p>
+      ${ev.markets.slice(0, 40).map((m) => `<div class="mkt"><span class="grow">${esc(m.label)}</span>${side(m, 'yes')}${side(m, 'no')}</div>`).join('') || '<p class="mut">No open markets.</p>'}` : ''}
+    ${d.legs.length ? `<button class="btn ghost" data-act="tclear" style="margin-top:10px">Clear test picks for Week ${d.week}</button>` : ''}
+  </div>`;
 }
 
 function hostPanel() {
@@ -395,12 +414,14 @@ async function host(action, extra = {}) {
 
 app.addEventListener('change', (e) => {
   if (e.target.matches('select.line')) { state.lines[e.target.dataset.fam] = e.target.value; render(); }
+  if (e.target.id === 't-for') state.testFor = Number(e.target.value);
 });
 
 app.addEventListener('input', (e) => {
   if (e.target.id === 'filter') { state.filter = e.target.value; render(); }
   if (e.target.id === 'omin') { state.oddsMin = e.target.value; render(); }
   if (e.target.id === 'omax') { state.oddsMax = e.target.value; render(); }
+  if (e.target.id === 't-q') state.testQ = e.target.value;
 });
 
 app.addEventListener('click', async (e) => {
@@ -439,6 +460,21 @@ app.addEventListener('click', async (e) => {
     case 'who': state.choosingName = true; render(); break;
     case 'close': state.picking = false; state.choosingName = false; ls.set('seenNames', true); render(); break;
     case 'pick': openPicker(); break;
+    case 'tfind':
+      try { state.testEvent = await api(`/api/test?q=${encodeURIComponent(state.testQ)}`); } catch (err) { state.testEvent = { error: err.message }; }
+      render(); break;
+    case 'tpick': {
+      const playerId = state.testFor || state.me?.id || state.data.players[0]?.id;
+      try {
+        await api('/api/leg', { method: 'POST', body: { week: state.week, playerId, ticker: b.dataset.ticker, side: b.dataset.side, game: state.testEvent.title, test: true } });
+        toast(`Added for ${state.data.players.find((pl) => pl.id === playerId)?.name}`); refresh();
+      } catch (err) { toast(err.message); }
+      break;
+    }
+    case 'tclear':
+      if (!confirm('Remove all test picks for this week?')) return;
+      try { await api('/api/test', { method: 'DELETE', body: { week: state.week } }); refresh(); } catch (err) { toast(err.message); }
+      break;
     case 'rmmine': {
       const leg = state.data.legs.find((l) => l.playerId === state.me?.id);
       if (!leg || !confirm(`Remove your leg (${leg.label} ${leg.side.toUpperCase()})? You can pick again any time before the lock.`)) return;
@@ -476,5 +512,5 @@ const $ = (id) => document.getElementById(id)?.value;
 refresh();
 // Live board: refresh every 15s while the tab is visible and no sheet is open.
 setInterval(() => {
-  if (document.visibilityState === 'visible' && !state.picking && !state.choosingName && !document.querySelector('details[open]:not(.game)')) refresh();
+  if (document.visibilityState === 'visible' && document.activeElement?.id !== 't-q' && !state.picking && !state.choosingName && !document.querySelector('details[open]:not(.game)')) refresh();
 }, 15000);
