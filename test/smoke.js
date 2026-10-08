@@ -44,6 +44,10 @@ const kalshi = http.createServer((req, res) => {
   let body;
   if (u.pathname === '/events') body = { events: events[u.searchParams.get('series_ticker')] || [], cursor: '' };
   else if (u.pathname.startsWith('/markets/') && markets[ticker]) body = { market: markets[ticker] };
+  else if (u.pathname.startsWith('/events/')) {
+    const ev = Object.values(events).flat().find((e) => e.event_ticker === ticker);
+    if (ev) body = { event: ev };
+  }
   res.writeHead(body ? 200 : 404, { 'content-type': 'application/json' }).end(JSON.stringify(body || {}));
 }).listen(0);
 process.env.KALSHI_BASE = `http://localhost:${kalshi.address().port}`;
@@ -100,9 +104,40 @@ assert.equal(wk.legs.find((l) => l.player === 'Keane').pill, true);
 now = Date.parse('2026-10-04T16:00:01Z');
 assert.equal((await pick('Eric', 'KXNFLGAME-26OCT04BUFNE-BUF', 'yes')).status, 403);
 assert.equal((await call('/api/leg', 'DELETE', { week: 4, playerId: id('Sam') })).status, 403); // can't remove after lock
+
+// Live tracking. Before kickoff (1 PM ET): pregame, chance = bid/ask midpoint.
+wk = (await call('/api/week?week=4')).data;
+const leg = (name) => wk.legs.find((l) => l.player === name);
+assert.equal(leg('Sam').phase, 'pregame');
+assert.equal(leg('Sam').kickoff, '2026-10-04T17:00:00Z'); // saved on the leg at pick time
+assert.equal(leg('Sam').chance, 56); // 55/57 (integer cents)
+assert.equal(leg('Josh').chance, 61); // NO side: 100 - (38+40)/2
+assert.equal(wk.parlay.chance, 3.8); // 56% x 11% x 61%
+
+// Mid-game: prices move, the book goes one-sided, and trades stand in for a wide spread.
+now = Date.parse('2026-10-04T18:30:00Z');
+Object.assign(markets['KXNFLTD-26OCT04BUFNE-JCOOK'], { yes_bid: 97, yes_ask: 100 }); // ask 100: midpoint still works
+Object.assign(markets['KXNFLTD-26OCT04BUFNE-LONG'], { yes_bid_dollars: '0.0100', yes_ask_dollars: '0.6000', last_price_dollars: '0.0300' });
+Object.assign(markets['KXNFLGAME-26OCT04BUFNE-NE'], { status: 'closed' }); // game over, result not posted yet
+wk = (await call('/api/week?week=4')).data;
+assert.deepEqual(wk.legs.map((l) => [l.player, l.phase, l.chance]), [['Sam', 'live', 99], ['Keane', 'live', 3], ['Josh', 'settling', 61]]);
+assert.equal(wk.parlay.live, 3);
+assert.equal(wk.parlay.chance, 1.8);
+assert.equal(wk.onlyMissSoFar, null);
+
+// One leg misses while others are pending: parlay chance drops to 0 and Rule 2 is in play.
+Object.assign(markets['KXNFLTD-26OCT04BUFNE-LONG'], { status: 'finalized', result: 'no' });
+now += 20e3; // past the 15s live-game price cache
+wk = (await call('/api/week?week=4')).data;
+assert.equal(wk.parlay.chance, 0);
+assert.equal(wk.onlyMissSoFar, 'Keane');
+assert.equal(wk.soleMiss, null); // not official until everything settles
+
+now += 20e3;
 Object.assign(markets['KXNFLGAME-26OCT04BUFNE-NE'], { status: 'finalized', result: 'no' });
 Object.assign(markets['KXNFLTD-26OCT04BUFNE-JCOOK'], { status: 'finalized', result: 'yes' });
 Object.assign(markets['KXNFLTD-26OCT04BUFNE-LONG'], { status: 'finalized', result: 'no' });
+now += 20e3; // past the 15s live-game price cache
 wk = (await call('/api/week?week=4')).data;
 assert.deepEqual(wk.legs.map((l) => [l.player, l.status]), [['Sam', 'hit'], ['Keane', 'miss'], ['Josh', 'hit']]);
 assert.equal(wk.soleMiss, 'Keane');
@@ -121,6 +156,22 @@ const s = (await call('/api/season')).data;
 assert.equal(s.table.find((r) => r.player === 'Keane').soleMisses, 1);
 assert.equal(s.table.find((r) => r.player === 'Keane').losses, 1); // Loser of the Week count
 assert.equal(s.table[0].hitRate, 1);
+
+// Test mode (every deployment but production): any Kalshi market, even after the lock.
+const found = (await call('/api/test?q=' + encodeURIComponent('https://kalshi.com/markets/kxnflgame/nfl-game/kxnflgame-26oct05dalchi'))).data;
+assert.equal(found.title, 'Dallas at Chicago');
+assert.deepEqual(found.markets.map((m) => m.ticker), ['KXNFLGAME-26OCT05DALCHI-DAL']);
+assert.equal((await call('/api/test?q=KXNFLGAME-26OCT01SEALA-SEA')).data.markets.length, 1); // a market ticker works too
+assert.equal((await call('/api/leg', 'POST', { week: 4, playerId: id('Alex'), ticker: 'KXNFLGAME-26OCT01SEALA-SEA', side: 'yes', test: true })).status, 200);
+let tl = (await call('/api/week?week=4')).data.legs.find((l) => l.player === 'Alex');
+assert.equal(tl.phase, 'live'); // no start time for test picks
+assert.equal((await call('/api/week?week=4')).data.testMode, true);
+process.env.VERCEL_ENV = 'production';
+assert.equal((await call('/api/leg', 'POST', { week: 4, playerId: id('Alex'), ticker: 'KXNFLGAME-26OCT01SEALA-SEA', side: 'yes', test: true })).status, 403);
+assert.equal((await call('/api/test?q=KXNFLGAME-26OCT01SEALA-SEA')).status, 404);
+assert.equal((await call('/api/week?week=4')).data.testMode, false);
+delete process.env.VERCEL_ENV;
+assert.equal((await call('/api/leg', 'DELETE', { week: 4, playerId: id('Alex') }, 'host')).status, 200);
 
 // Host can wipe a week's picks.
 assert.equal((await call('/api/admin', 'POST', { action: 'clearWeek', week: 4 })).status, 403);

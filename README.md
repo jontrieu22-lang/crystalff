@@ -12,6 +12,7 @@ Kalshi is only read for prices and results. Nobody needs a Kalshi account, and n
   and passing/rushing/receiving yards, for games kicking off after the lock (Kalshi's `occurrence_datetime`). Anything at **+600** or longer is marked 💊 with the James Clause warning.
   One leg per person, and no two people can take the same market.
 - **Odds** are recorded at the Kalshi ask price when you pick. The parlay's estimated odds multiply those together.
+- **Live tracking**: after the lock each leg shows whether its game is upcoming, live or final. It also shows the market's current chance it hits (the Kalshi bid/ask midpoint, or the last trade when the spread is wide) against the price it was picked at, with legs under 25% flagged as sweating. The parlay card shows the chance the whole parlay hits and who is the only miss so far. The page refreshes every 15 seconds.
 - **Results** fill in automatically from Kalshi's market result, checked whenever the page loads and by a daily cron.
 - **Rule 2** is automatic: if exactly one leg misses, the app names that person as owing next week's $5.
 - **Season tab**: leg hit rate per person (the "best situation monitor"), W-L, average odds, and solo misses.
@@ -29,6 +30,12 @@ Kalshi is only read for prices and results. Nobody needs a Kalshi account, and n
 
 Optional variables: `SEASON_START`, `POISON_PILL` (600), `STAKE` (5, total stake on the parlay), `NFL_SERIES` (e.g.
 `KXNFLGAME:Winner,KXNFLTD:Touchdowns` to change which Kalshi series are offered), `KALSHI_BASE`.
+
+## Dev vs production
+
+- **Production** is the `main` branch at crystalff.vercel.app, using `league.json`.
+- **Dev** is the `dev` branch (and every other preview deployment). It uses a separate `league-preview.json`, so nothing there touches the real league.
+- **Test mode** is on everywhere except production. A 🧪 card on the week page takes any kalshi.com link or ticker (any sport, any time), and lets you pick legs for anyone to try live tracking. It skips the lock and NFL-only rules. Clear the test picks from the same card.
 
 ## Local dev
 

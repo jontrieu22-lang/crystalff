@@ -14,7 +14,7 @@ const state = {
   tab: 'week',
   week: Number(new URLSearchParams(location.search).get('week')) || null,
   data: null, catalog: null, season: null,
-  picking: false, choosingName: false, filter: '', oddsMin: '', oddsMax: '', openGames: new Set(), lines: {},
+  picking: false, choosingName: false, testQ: '', testEvent: null, testFor: null, filter: '', oddsMin: '', oddsMax: '', openGames: new Set(), lines: {},
 };
 
 async function api(path, { method = 'GET', body } = {}) {
@@ -58,6 +58,39 @@ function header() {
   </div>`;
 }
 
+// ---------- live tracking ----------
+
+const tone = (pct) => (pct >= 60 ? 'good' : pct >= 30 ? 'warn' : 'bad');
+const pctLabel = (pct) => (pct > 0 && pct < 1 ? '<1%' : pct > 99 && pct < 100 ? '>99%' : `${Math.round(pct)}%`);
+const kickoffLabel = (iso) => new Date(iso).toLocaleString('en-US', { weekday: 'short', hour: 'numeric', minute: '2-digit' });
+
+function phaseLabel(l) {
+  if (l.status !== 'pending') return '';
+  if (l.phase === 'live') return ' · <span class="live-dot">● LIVE</span>';
+  if (l.phase === 'settling') return ' · Final, waiting on Kalshi';
+  return l.kickoff ? ` · ${kickoffLabel(l.kickoff)}` : '';
+}
+
+// "71% to hit ↑ from 38%" plus a bar. The price paid was the market's chance at pick time.
+function chanceLine(l) {
+  const t = tone(l.chance);
+  const diff = l.chance - l.price;
+  const arrow = Math.abs(diff) < 3 ? '' : diff > 0 ? ' ↑' : ' ↓';
+  return `<div class="mut"><b class="${t}-t">${pctLabel(l.chance)}</b> to hit${arrow} · picked at ${l.price}%</div>
+    <div class="meter"><i style="width:${Math.max(2, l.chance)}%;background:var(--${t})"></i></div>`;
+}
+
+function liveSummary(d) {
+  const p = d.parlay;
+  const toPlay = d.legs.filter((l) => l.phase === 'pregame').length;
+  const counts = [`${p.hits} ✅`, p.live && `${p.live} live`, toPlay && `${toPlay} to play`, p.misses && `${p.misses} ❌`].filter(Boolean).join(' · ');
+  let line;
+  if (p.misses > 1) line = '💀 Parlay is dead';
+  else if (d.onlyMissSoFar) line = `😬 ${esc(d.onlyMissSoFar)} is the only miss so far`;
+  else if (p.chance != null) line = `Chance it hits: <b class="${tone(p.chance)}-t">${pctLabel(p.chance)}</b>`;
+  return `<div class="row" style="margin-bottom:6px"><span class="grow mut">${counts}</span>${line ? `<span class="mut">${line}</span>` : ''}</div>`;
+}
+
 function weekView() {
   const d = state.data;
   const mine = state.me && d.legs.find((l) => l.playerId === state.me.id);
@@ -70,15 +103,23 @@ function weekView() {
   else if (p.won) banner = `<div class="banner good">💰 Parlay hit! Every leg cashed.</div>`;
   else if (p.settled && p.misses > 1) banner = `<div class="banner warn">${p.misses} legs missed. Nobody's on the hook alone.</div>`;
 
-  const legs = d.legs.map((l) => `<div class="leg">
-      <div class="st">${{ hit: '✅', miss: '❌', void: '➖', pending: '⏳' }[l.status]}</div>
+  // After the lock, live games first, then ones still to play, then settled legs.
+  const order = { live: 0, settling: 0, pregame: 1, final: 2 };
+  const rows = d.locked ? [...d.legs].sort((a, b) => order[a.phase] - order[b.phase]) : d.legs;
+  const legs = rows.map((l) => {
+    const live = l.status === 'pending' && l.chance != null;
+    const sweat = live && l.phase !== 'pregame' && l.chance < 25;
+    return `<div class="leg${sweat ? ' sweat' : ''}">
+      <div class="st">${{ hit: '✅', miss: '❌', void: '➖', pending: l.phase === 'pregame' ? '⏳' : '🏈' }[l.status]}</div>
       <div class="grow">
-        <div class="who">${esc(l.player)}</div>
+        <div class="who">${esc(l.player)}${sweat ? ' <span class="mut">😰 sweating</span>' : ''}</div>
         <div>${esc(l.label)} <b>${l.side.toUpperCase()}</b>${l.pill ? ` <span title="${esc(JAMES)}">💊</span>` : ''}</div>
-        <div class="mut">${esc(l.game)}${l.liveOdds != null && l.status === 'pending' && l.liveOdds !== l.odds ? ` · now ${odds(l.liveOdds)}` : ''}</div>
+        <div class="mut">${esc(l.game)}${phaseLabel(l)}</div>
+        ${live ? chanceLine(l) : ''}
       </div>
       <div class="odds">${odds(l.odds)}</div>
-    </div>`).join('');
+    </div>`;
+  }).join('');
 
   return `
   <div class="card">
@@ -100,6 +141,7 @@ function weekView() {
       <div class="grow"><b>The parlay</b> <span class="mut">${d.legs.length} leg${d.legs.length === 1 ? '' : 's'}</span></div>
       <div class="odds">${odds(p.odds)}</div>
     </div>
+    ${(d.locked || p.live) && d.legs.length && !p.settled ? liveSummary(d) : ''}
     ${legs || '<p class="mut">No legs yet. Be the first.</p>'}
     ${d.waitingOn.length && !d.locked ? `<p class="mut">Waiting on: ${d.waitingOn.map(esc).join(', ')}</p>` : ''}
     ${d.waitingOn.length && d.locked ? `<p class="mut">No leg: ${d.waitingOn.map(esc).join(', ')}</p>` : ''}
@@ -114,6 +156,7 @@ function weekView() {
     ${d.note ? `<p class="mut">${esc(d.note)}</p>` : ''}
     ${p.hits || p.misses ? `<p class="mut">${p.hits} hit · ${p.misses} missed · ${p.pending} pending</p>` : ''}
   </div>
+  ${d.testMode ? testPanel() : ''}
   ${hostPanel()}`;
 }
 
@@ -144,6 +187,24 @@ function rulesView() {
 • One leg per person per week, and no two people can take the same leg.
 • Legs and odds come live from Kalshi. No account or money needed in the app.
 • Odds are locked in when you pick. Results fill in automatically when Kalshi settles the market.</pre></div>`;
+}
+
+// Dev/preview only: mock-pick any live Kalshi market to try live tracking.
+function testPanel() {
+  const d = state.data, ev = state.testEvent;
+  const forId = state.testFor || state.me?.id || d.players[0]?.id;
+  const side = (m, s) => m[s] ? `<button class="side" data-act="tpick" data-ticker="${esc(m.ticker)}" data-side="${s}">${s.toUpperCase()}<b>${odds(m[s].odds)}</b></button>` : '';
+  return `<div class="card test">
+    <b>🧪 Test mode</b> <span class="mut">dev only, separate data from the real league</span>
+    <p class="mut">Paste a kalshi.com link or ticker for any live game, then pick legs for anyone.</p>
+    <div class="row"><input id="t-q" value="${esc(state.testQ)}" placeholder="https://kalshi.com/markets/…"><button class="chip" data-act="tfind">Find</button></div>
+    ${ev?.error ? `<p class="mut">${esc(ev.error)}</p>` : ''}
+    ${ev?.markets ? `<div class="row" style="margin-top:8px"><span class="mut">Pick for</span>
+        <select id="t-for" style="width:auto">${d.players.map((pl) => `<option value="${pl.id}" ${pl.id === forId ? 'selected' : ''}>${esc(pl.name)}</option>`).join('')}</select></div>
+      <p><b>${esc(ev.title)}</b></p>
+      ${ev.markets.slice(0, 40).map((m) => `<div class="mkt"><span class="grow">${esc(m.label)}</span>${side(m, 'yes')}${side(m, 'no')}</div>`).join('') || '<p class="mut">No open markets.</p>'}` : ''}
+    ${d.legs.length ? `<button class="btn ghost" data-act="tclear" style="margin-top:10px">Clear test picks for Week ${d.week}</button>` : ''}
+  </div>`;
 }
 
 function hostPanel() {
@@ -356,12 +417,14 @@ async function host(action, extra = {}) {
 
 app.addEventListener('change', (e) => {
   if (e.target.matches('select.line')) { state.lines[e.target.dataset.fam] = e.target.value; render(); }
+  if (e.target.id === 't-for') state.testFor = Number(e.target.value);
 });
 
 app.addEventListener('input', (e) => {
   if (e.target.id === 'filter') { state.filter = e.target.value; render(); }
   if (e.target.id === 'omin') { state.oddsMin = e.target.value; render(); }
   if (e.target.id === 'omax') { state.oddsMax = e.target.value; render(); }
+  if (e.target.id === 't-q') state.testQ = e.target.value;
 });
 
 app.addEventListener('click', async (e) => {
@@ -400,6 +463,21 @@ app.addEventListener('click', async (e) => {
     case 'who': state.choosingName = true; render(); break;
     case 'close': state.picking = false; state.choosingName = false; ls.set('seenNames', true); render(); break;
     case 'pick': openPicker(); break;
+    case 'tfind':
+      try { state.testEvent = await api(`/api/test?q=${encodeURIComponent(state.testQ)}`); } catch (err) { state.testEvent = { error: err.message }; }
+      render(); break;
+    case 'tpick': {
+      const playerId = state.testFor || state.me?.id || state.data.players[0]?.id;
+      try {
+        await api('/api/leg', { method: 'POST', body: { week: state.week, playerId, ticker: b.dataset.ticker, side: b.dataset.side, game: state.testEvent.title, test: true } });
+        toast(`Added for ${state.data.players.find((pl) => pl.id === playerId)?.name}`); refresh();
+      } catch (err) { toast(err.message); }
+      break;
+    }
+    case 'tclear':
+      if (!confirm('Remove all test picks for this week?')) return;
+      try { await api('/api/test', { method: 'DELETE', body: { week: state.week } }); refresh(); } catch (err) { toast(err.message); }
+      break;
     case 'rmmine': {
       const leg = state.data.legs.find((l) => l.playerId === state.me?.id);
       if (!leg || !confirm(`Remove your leg (${leg.label} ${leg.side.toUpperCase()})? You can pick again any time before the lock.`)) return;
@@ -437,5 +515,5 @@ const $ = (id) => document.getElementById(id)?.value;
 refresh();
 // Live board: refresh every 15s while the tab is visible and no sheet is open.
 setInterval(() => {
-  if (document.visibilityState === 'visible' && !state.picking && !state.choosingName && !document.querySelector('details[open]:not(.game)')) refresh();
+  if (document.visibilityState === 'visible' && document.activeElement?.id !== 't-q' && !state.picking && !state.choosingName && !document.querySelector('details[open]:not(.game)')) refresh();
 }, 15000);
