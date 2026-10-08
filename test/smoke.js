@@ -114,9 +114,12 @@ assert.equal(wk.parlay.settled, true);
 assert.equal((await call('/api/admin', 'POST', { action: 'week', week: 4, placer: 'Ethan' })).status, 403);
 assert.equal((await call('/api/admin', 'POST', { action: 'week', week: 4, placer: 'Ethan', actualOdds: '+450' }, 'host')).status, 200);
 assert.equal((await call('/api/week?week=4')).data.placer, 'Ethan');
+assert.equal((await call('/api/admin', 'POST', { action: 'week', week: 4, placer: 'Ethan', loser: 'Keane' }, 'host')).status, 200);
+assert.equal((await call('/api/week?week=4')).data.loser, 'Keane');
 
 const s = (await call('/api/season')).data;
 assert.equal(s.table.find((r) => r.player === 'Keane').soleMisses, 1);
+assert.equal(s.table.find((r) => r.player === 'Keane').losses, 1); // Loser of the Week count
 assert.equal(s.table[0].hitRate, 1);
 
 // Host can wipe a week's picks.
