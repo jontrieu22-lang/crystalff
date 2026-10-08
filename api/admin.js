@@ -9,7 +9,7 @@ export const POST = route(async (req) => {
     case 'check':
       return { ok: true };
     case 'week':
-      await update((d) => { d.weeks[Number(b.week)] = { placer: b.placer || '', actualOdds: b.actualOdds || '', note: b.note || '' }; });
+      await update((d) => { d.weeks[Number(b.week)] = { placer: b.placer || '', loser: b.loser || '', actualOdds: b.actualOdds || '', note: b.note || '' }; });
       return { ok: true };
     case 'clearWeek': {
       const week = Number(b.week);

@@ -110,6 +110,7 @@ function weekView() {
     <div class="row"><span class="grow mut">Stake</span><b>${money(p.stake)}</b></div>
     <div class="row"><span class="grow mut">Est. payout</span><b>${money(p.payout)}</b></div>
     <div class="row"><span class="grow mut">Placing it</span><b>${esc(d.placer) || 'TBD'}</b></div>
+    ${d.loser ? `<div class="row"><span class="grow mut">Loser of the week</span><b>🏳️ ${esc(d.loser)}</b></div>` : ''}
     ${d.note ? `<p class="mut">${esc(d.note)}</p>` : ''}
     ${p.hits || p.misses ? `<p class="mut">${p.hits} hit · ${p.misses} missed · ${p.pending} pending</p>` : ''}
   </div>
@@ -122,11 +123,11 @@ function seasonView() {
   const pct = (r) => (r == null ? '—' : `${Math.round(r * 100)}%`);
   return `<div class="card">
     <b>Best situation monitors</b>
-    <p class="mut">Leg hit rate across the season. "Solo" = weeks you were the only miss.</p>
+    <p class="mut">Leg hit rate across the season. "Solo" = weeks you were the only miss. 🏳️ = times Loser of the Week.</p>
     <table>
-      <tr><th>#</th><th>Player</th><th>Hit</th><th>W-L</th><th>Avg odds</th><th>Solo</th></tr>
+      <tr><th>#</th><th>Player</th><th>Hit</th><th>W-L</th><th>Avg odds</th><th>Solo</th><th>🏳️</th></tr>
       ${s.table.map((r, i) => `<tr><td>${i + 1}</td><td>${esc(r.player)}</td><td><b>${pct(r.hitRate)}</b></td>
-        <td>${r.hits}-${r.misses}</td><td>${odds(r.avgOdds)}</td><td>${r.soleMisses || ''}</td></tr>`).join('')}
+        <td>${r.hits}-${r.misses}</td><td>${odds(r.avgOdds)}</td><td>${r.soleMisses || ''}</td><td>${r.losses || ''}</td></tr>`).join('')}
     </table>
     <p class="mut">Parlays hit: ${s.parlaysWon} of ${s.parlaysSettled} settled weeks.</p>
   </div>`;
@@ -152,6 +153,8 @@ function hostPanel() {
     <p class="mut">Week ${d.week}</p>
     <label class="mut">Placing it</label>
     <select id="h-placer"><option value="">TBD</option>${d.players.map((p) => `<option ${p.name === d.placer ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}</select>
+    <label class="mut">Loser of the week</label>
+    <select id="h-loser"><option value="">Not decided</option>${d.players.map((p) => `<option ${p.name === d.loser ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}</select>
     <label class="mut">Actual odds placed</label><input id="h-odds" value="${esc(d.actualOdds)}" placeholder="+612">
     <label class="mut">Note</label><input id="h-note" value="${esc(d.note)}">
     <button class="btn" data-act="saveweek" style="margin-top:10px">Save week</button>
@@ -416,7 +419,7 @@ app.addEventListener('click', async (e) => {
       break;
     }
     case 'hostout': e.preventDefault(); state.host = ''; ls.set('hostKey', ''); render(); break;
-    case 'saveweek': host('week', { placer: $('h-placer'), actualOdds: $('h-odds'), note: $('h-note') }); break;
+    case 'saveweek': host('week', { placer: $('h-placer'), loser: $('h-loser'), actualOdds: $('h-odds'), note: $('h-note') }); break;
     case 'clearweek':
       if (confirm(`Delete every pick for Week ${state.week} (${state.data.legs.length} legs)? This can't be undone.`)) host('clearWeek');
       break;
